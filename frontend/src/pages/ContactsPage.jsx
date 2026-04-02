@@ -1,5 +1,22 @@
-import { PlusOutlined, ReloadOutlined, SearchOutlined, UserOutlined } from "@ant-design/icons";
-import { Button, Card, Form, Input, message, Modal, Select, Spin } from "antd";
+import {
+  DeleteOutlined,
+  EditOutlined,
+  PlusOutlined,
+  ReloadOutlined,
+  SearchOutlined,
+  UserOutlined,
+} from "@ant-design/icons";
+import {
+  Button,
+  Card,
+  Form,
+  Input,
+  message,
+  Modal,
+  Popconfirm,
+  Select,
+  Spin,
+} from "antd";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client.js";
 
@@ -10,14 +27,25 @@ const STATUS_OPTIONS = [
 ];
 
 export default function ContactsPage() {
-  const [loading, setLoading]     = useState(false);
-  const [contacts, setContacts]   = useState([]);
-  const [companies, setCompanies] = useState([]);
-  const [error, setError]         = useState(null);
+  const [loading, setLoading]       = useState(false);
+  const [contacts, setContacts]     = useState([]);
+  const [companies, setCompanies]   = useState([]);
+  const [error, setError]           = useState(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [creating, setCreating]   = useState(false);
-  const [search, setSearch]       = useState("");
-  const [form] = Form.useForm();
+  const [creating, setCreating]     = useState(false);
+  const [editContact, setEditContact] = useState(null); // contact being edited
+  const [saving, setSaving]         = useState(false);
+  const [search, setSearch]         = useState("");
+  const [createForm] = Form.useForm();
+  const [editForm]   = Form.useForm();
+
+  const toList = (payload) => {
+    if (Array.isArray(payload)) return payload;
+    if (Array.isArray(payload?.companies)) return payload.companies;
+    if (Array.isArray(payload?.items)) return payload.items;
+    if (Array.isArray(payload?.data)) return payload.data;
+    return [];
+  };
 
   const companyOptions = useMemo(
     () => companies.map((c) => ({ value: c.id, label: c.name })),
@@ -29,11 +57,11 @@ export default function ContactsPage() {
     setError(null);
     try {
       const [cRes, coRes] = await Promise.all([
-        api.get("/contacts?limit=100&page=1"),
+        api.get("/contacts?limit=200&page=1"),
         api.get("/companies"),
       ]);
-      setContacts(cRes.data || []);
-      setCompanies(coRes.data || []);
+      setContacts(toList(cRes.data));
+      setCompanies(toList(coRes.data));
     } catch (e) {
       setError(e?.response?.data?.message || e.message);
     } finally {
@@ -48,13 +76,49 @@ export default function ContactsPage() {
     try {
       await api.post("/contacts", values);
       message.success("Contact created");
-      form.resetFields();
+      createForm.resetFields();
       setShowCreate(false);
       await load();
     } catch (e) {
       message.error(e?.response?.data?.message || e.message);
     } finally {
       setCreating(false);
+    }
+  }
+
+  function openEdit(c) {
+    setEditContact(c);
+    editForm.setFieldsValue({
+      name: c.name,
+      phone: c.phone || "",
+      email: c.email || "",
+      companyId: c.companyId || undefined,
+      status: c.status || "lead",
+    });
+  }
+
+  async function saveEdit(values) {
+    if (!editContact) return;
+    setSaving(true);
+    try {
+      await api.put(`/contacts/${editContact.id}`, values);
+      message.success("Contact updated");
+      setEditContact(null);
+      await load();
+    } catch (e) {
+      message.error(e?.response?.data?.message || e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteContact(id) {
+    try {
+      await api.delete(`/contacts/${id}`);
+      message.success("Contact deleted");
+      await load();
+    } catch (e) {
+      message.error(e?.response?.data?.message || e.message);
     }
   }
 
@@ -71,6 +135,39 @@ export default function ContactsPage() {
     companies.forEach((c) => (m[c.id] = c.name));
     return m;
   }, [companies]);
+
+  const ContactForm = ({ form, onFinish, loading: submitting, submitLabel }) => (
+    <Form form={form} layout="vertical" onFinish={onFinish} style={{ marginTop: 8 }}>
+      <Form.Item name="name" label="Full Name" rules={[{ required: true }]}>
+        <Input placeholder="Jane Smith" />
+      </Form.Item>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <Form.Item name="phone" label="Phone">
+          <Input placeholder="+1 555 0100" />
+        </Form.Item>
+        <Form.Item name="email" label="Email">
+          <Input placeholder="jane@company.com" />
+        </Form.Item>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <Form.Item name="companyId" label="Company">
+          <Select allowClear options={companyOptions} placeholder="Select company" />
+        </Form.Item>
+        <Form.Item name="status" label="Status" initialValue="lead">
+          <Select options={STATUS_OPTIONS} />
+        </Form.Item>
+      </div>
+      <Form.Item style={{ marginBottom: 0 }}>
+        <Button
+          type="primary" htmlType="submit"
+          icon={<PlusOutlined />} loading={submitting}
+          block style={{ height: 40 }}
+        >
+          {submitLabel}
+        </Button>
+      </Form.Item>
+    </Form>
+  );
 
   return (
     <div>
@@ -102,34 +199,30 @@ export default function ContactsPage() {
         title="Add New Contact"
         onCancel={() => setShowCreate(false)}
         footer={null}
-        destroyOnClose
+        destroyOnHidden
       >
-        <Form form={form} layout="vertical" onFinish={createContact} style={{ marginTop: 8 }}>
-          <Form.Item name="name" label="Full Name" rules={[{ required: true }]}>
-            <Input placeholder="Jane Smith" />
-          </Form.Item>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <Form.Item name="phone" label="Phone">
-              <Input placeholder="+1 555 0100" />
-            </Form.Item>
-            <Form.Item name="email" label="Email">
-              <Input placeholder="jane@company.com" />
-            </Form.Item>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <Form.Item name="companyId" label="Company">
-              <Select allowClear options={companyOptions} placeholder="Select company" />
-            </Form.Item>
-            <Form.Item name="status" label="Status" initialValue="lead">
-              <Select options={STATUS_OPTIONS} />
-            </Form.Item>
-          </div>
-          <Form.Item style={{ marginBottom: 0 }}>
-            <Button type="primary" htmlType="submit" icon={<PlusOutlined />} loading={creating} block style={{ height: 40 }}>
-              Create Contact
-            </Button>
-          </Form.Item>
-        </Form>
+        <ContactForm
+          form={createForm}
+          onFinish={createContact}
+          loading={creating}
+          submitLabel="Create Contact"
+        />
+      </Modal>
+
+      {/* Edit modal */}
+      <Modal
+        open={!!editContact}
+        title={`Edit — ${editContact?.name || ""}`}
+        onCancel={() => setEditContact(null)}
+        footer={null}
+        destroyOnHidden
+      >
+        <ContactForm
+          form={editForm}
+          onFinish={saveEdit}
+          loading={saving}
+          submitLabel="Save Changes"
+        />
       </Modal>
 
       {/* Search */}
@@ -144,7 +237,7 @@ export default function ContactsPage() {
       </div>
 
       {/* Table card */}
-      <Card className="page-card" bodyStyle={{ padding: 0 }}>
+      <Card className="page-card" styles={{ body: { padding: 0 } }}>
         {loading ? (
           <div style={{ display: "flex", justifyContent: "center", padding: 60 }}>
             <Spin size="large" />
@@ -158,23 +251,25 @@ export default function ContactsPage() {
           <>
             {/* Table header */}
             <div style={{
-              display: "grid", gridTemplateColumns: "1fr 130px 180px 130px 90px",
+              display: "grid", gridTemplateColumns: "1fr 130px 180px 130px 90px 80px",
               padding: "11px 18px", fontSize: 11, fontWeight: 700,
               textTransform: "uppercase", letterSpacing: "0.08em",
               color: "var(--text-3)", borderBottom: "1px solid var(--border)",
               background: "var(--surface-2)",
             }}>
-              <span>Name</span><span>Phone</span><span>Email</span><span>Company</span><span>Status</span>
+              <span>Name</span><span>Phone</span><span>Email</span>
+              <span>Company</span><span>Status</span><span style={{ textAlign: "right" }}>Actions</span>
             </div>
 
             {filtered.map((c, i) => (
               <div
                 key={c.id || i}
                 style={{
-                  display: "grid", gridTemplateColumns: "1fr 130px 180px 130px 90px",
+                  display: "grid", gridTemplateColumns: "1fr 130px 180px 130px 90px 80px",
                   padding: "13px 18px", fontSize: 13,
                   borderBottom: i < filtered.length - 1 ? "1px solid var(--border)" : "none",
                   transition: "background 150ms",
+                  alignItems: "center",
                 }}
                 onMouseEnter={(e) => { e.currentTarget.style.background = "var(--surface-2)"; }}
                 onMouseLeave={(e) => { e.currentTarget.style.background = ""; }}
@@ -192,8 +287,32 @@ export default function ContactsPage() {
                 </span>
                 <span style={{ color: "var(--text-2)", fontSize: 12 }}>{c.phone || "–"}</span>
                 <span style={{ color: "var(--text-2)", fontSize: 12 }}>{c.email || "–"}</span>
-                <span style={{ color: "var(--text-2)", fontSize: 12 }}>{c.companyId ? (companyMap[c.companyId] || c.companyId) : "–"}</span>
+                <span style={{ color: "var(--text-2)", fontSize: 12 }}>
+                  {c.companyId ? (companyMap[c.companyId] || c.companyId) : "–"}
+                </span>
                 <span><span className={`srm-badge ${c.status || "inactive"}`}>{c.status || "–"}</span></span>
+                <span style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
+                  <Button
+                    size="small"
+                    icon={<EditOutlined />}
+                    onClick={() => openEdit(c)}
+                    style={{ width: 30, padding: 0 }}
+                  />
+                  <Popconfirm
+                    title="Delete this contact?"
+                    onConfirm={() => deleteContact(c.id)}
+                    okText="Delete"
+                    cancelText="Cancel"
+                    okButtonProps={{ danger: true }}
+                  >
+                    <Button
+                      size="small"
+                      danger
+                      icon={<DeleteOutlined />}
+                      style={{ width: 30, padding: 0 }}
+                    />
+                  </Popconfirm>
+                </span>
               </div>
             ))}
           </>

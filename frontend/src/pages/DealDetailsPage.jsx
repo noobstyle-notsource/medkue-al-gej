@@ -100,7 +100,7 @@ export default function DealDetailsPage() {
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 360px", gap: 14, alignItems: "start" }}>
         {/* Comments list */}
-        <Card className="page-card" title={`Comments (${comments.length})`} bodyStyle={{ padding: 0 }}>
+        <Card className="page-card" title={`Comments (${comments.length})`} styles={{ body: { padding: 0 } }}>
           {loading ? (
             <div style={{ display: "flex", justifyContent: "center", padding: 60 }}>
               <Spin size="large" />

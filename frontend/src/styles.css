@@ -6,6 +6,65 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* ── Native App Feel (Remove text cursor/selection) ── */
+body {
+  cursor: default;
+  -webkit-user-select: none; /* Safari */
+  -ms-user-select: none; /* IE 10 and IE 11 */
+  user-select: none; /* Standard syntax */
+}
+
+/* Allow text selection ONLY in inputs and textareas */
+input, textarea, [contenteditable="true"] {
+  -webkit-user-select: auto !important;
+  -ms-user-select: auto !important;
+  user-select: auto !important;
+  cursor: text;
+}
+
+/* ── Remove ALL focus rings ── */
+*, *::before, *::after {
+  outline: none !important;
+}
+
+*:focus,
+*:focus-visible,
+*:focus-within,
+*:active {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Aggressive Ant Design focus overrides */
+[class^="ant-"]:focus,
+[class*=" ant-"]:focus,
+[class^="ant-"]:focus-within,
+[class*=" ant-"]:focus-within,
+[class^="ant-"]:focus-visible,
+[class*=" ant-"]:focus-visible,
+[class*="-focused"] {
+  outline: none !important;
+  box-shadow: none !important;
+  border-color: var(--border-2) !important;
+}
+
+/* Specific Ant Design components that use box-shadow for focus/border */
+.ant-input:focus,
+.ant-input-focused,
+.ant-input-affix-wrapper:focus,
+.ant-input-affix-wrapper-focused,
+.ant-select-selector:focus,
+.ant-select-focused .ant-select-selector,
+.ant-picker-focused,
+.ant-btn:focus,
+.ant-btn:active,
+.ant-checkbox-wrapper:focus,
+.ant-radio-wrapper:focus,
+.ant-switch:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 :root {
   --bg:          #080c14;
   --surface:     #0d1526;
@@ -125,8 +184,18 @@ body {
   font-size: 14px !important;
 }
 .ant-input:focus, .ant-input-affix-wrapper-focused, .ant-input-number-focused, .ant-picker-focused, .ant-select-focused .ant-select-selector {
-  border-color: var(--primary) !important;
-  box-shadow: 0 0 0 3px rgba(99,102,241,0.15) !important;
+  border-color: var(--border-2) !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+.ant-input:focus-visible,
+.ant-input-affix-wrapper:focus-within,
+.ant-input-number-focused,
+.ant-picker-focused,
+.ant-select-focused .ant-select-selector,
+.ant-input-password:focus-within {
+  box-shadow: none !important;
+  outline: none !important;
 }
 .ant-input::placeholder { color: var(--text-3) !important; }
 .ant-input-affix-wrapper .anticon { color: var(--text-3) !important; }

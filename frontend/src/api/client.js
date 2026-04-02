@@ -2,11 +2,11 @@ import axios from "axios";
 import { getMockResponse } from "./mockData.js";
 
 // ── Set to false to use a real backend ──
-const MOCK_MODE = true;
+const MOCK_MODE = false;
 
 // ── Real axios instance (used when MOCK_MODE = false) ──
 const _axios = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://localhost:4000",
+  baseURL: import.meta.env.VITE_API_URL || "/api",
   timeout: 30000,
 });
 
@@ -16,7 +16,7 @@ function getCookie(name) {
 }
 
 _axios.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token") || getCookie("auth_token");
+  const token = localStorage.getItem("crm_token") || getCookie("auth_token");
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
@@ -43,9 +43,9 @@ export const api = MOCK_MODE
   : _axios;
 
 export function setToken(token) {
-  localStorage.setItem("token", token);
+  localStorage.setItem("crm_token", token);
 }
 
 export function clearToken() {
-  localStorage.removeItem("token");
+  localStorage.removeItem("crm_token");
 }

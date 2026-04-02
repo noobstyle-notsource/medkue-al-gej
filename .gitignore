@@ -1,3 +1,22 @@
-node_modules
+# Root level
+node_modules/
 .env
-dist
+.env.local
+.env.production
+dist/
+build/
+*.log
+.DS_Store
+.vscode/
+.idea/
+
+# Frontend specific
+frontend/dist/
+frontend/build/
+frontend/.env.local
+
+# Backend specific
+backend/node_modules/
+backend/.env
+backend/.env.local
+backend/.env.production

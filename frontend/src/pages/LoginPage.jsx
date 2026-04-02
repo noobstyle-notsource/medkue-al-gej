@@ -36,8 +36,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   function startGoogleLogin() {
-    const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:4000";
-    window.location.href = `${baseUrl}/auth/google`;
+    window.location.href = "/api/auth/google";
   }
 
   async function onRegister(values) {

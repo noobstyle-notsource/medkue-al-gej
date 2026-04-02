@@ -24,13 +24,20 @@ export default function DealsPipelinePage() {
   const [creating, setCreating] = useState(false);
   const [form] = Form.useForm();
 
+  const toList = (payload) => {
+    if (Array.isArray(payload)) return payload;
+    if (Array.isArray(payload?.items)) return payload.items;
+    if (Array.isArray(payload?.data)) return payload.data;
+    return [];
+  };
+
   async function load() {
     setLoading(true);
     setError(null);
     try {
       const [d, c] = await Promise.all([api.get("/deals"), api.get("/contacts?limit=1000&page=1")]);
-      setDeals(d.data);
-      setContacts(c.data);
+      setDeals(toList(d.data));
+      setContacts(toList(c.data));
     } catch (e) {
       setError(e?.response?.data?.message || e.message);
     } finally {
@@ -116,7 +123,7 @@ export default function DealsPipelinePage() {
         title="Create New Deal"
         onCancel={() => setShowCreate(false)}
         footer={null}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form layout="vertical" form={form} onFinish={createDeal} style={{ marginTop: 8 }}>
           <Form.Item name="title" label="Deal Title" rules={[{ required: true }]}>

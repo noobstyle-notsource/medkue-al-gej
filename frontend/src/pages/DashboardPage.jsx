@@ -121,6 +121,13 @@ export default function DashboardPage() {
   const [error, setError]     = useState(null);
   const navigate              = useNavigate();
 
+  const toList = (payload) => {
+    if (Array.isArray(payload)) return payload;
+    if (Array.isArray(payload?.items)) return payload.items;
+    if (Array.isArray(payload?.data)) return payload.data;
+    return [];
+  };
+
   async function load() {
     setLoading(true); setError(null);
     try {
@@ -129,7 +136,7 @@ export default function DashboardPage() {
         api.get("/deals"),
       ]);
       setData(sumRes.data);
-      setDeals(dealsRes.data || []);
+      setDeals(toList(dealsRes.data));
     } catch (e) {
       setError(e?.response?.data?.message || e.message);
     } finally {

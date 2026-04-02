@@ -1,0 +1,184 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Multi-Tenant ─────────────────────────────────────────────────────────────
+
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users      User[]
+  companies  Company[]
+  deals      Deal[]
+  activities Activity[]
+  conversations Conversation[]
+  messages      Message[]
+  roles      Role[]
+  auditLogs  AuditLog[]
+}
+
+// ─── RBAC ─────────────────────────────────────────────────────────────────────
+
+model Role {
+  id          String   @id @default(cuid())
+  tenantId    String
+  name        String
+  // e.g. ["contacts:read","contacts:write","contacts:delete","deals:read",...]
+  permissions String[]
+  createdAt   DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  users  User[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+}
+
+model User {
+  id           String   @id @default(cuid())
+  tenantId     String
+  email        String   @unique
+  name         String
+  password     String?  // For email/password auth
+  emailVerified Boolean  @default(false)
+  emailPreference String @default("send") // "send", "forward", "none"
+  googleId     String?  @unique
+  roleId       String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  role      Role?      @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  auditLogs AuditLog[]
+  conversationsA Conversation[] @relation("ConversationUserA")
+  conversationsB Conversation[] @relation("ConversationUserB")
+  sentMessages   Message[]      @relation("MessageSender")
+
+  @@index([tenantId])
+}
+
+// ─── CRM Core ─────────────────────────────────────────────────────────────────
+
+model Company {
+  id        String    @id @default(cuid())
+  tenantId  String
+  name      String
+  phone     String?
+  email     String?
+  status    String    @default("Active") // Active | Lead | Inactive
+  deletedAt DateTime? // Soft delete
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  deals      Deal[]
+  activities Activity[]
+
+  @@index([tenantId, deletedAt])
+  @@index([tenantId, status])
+}
+
+model Deal {
+  id                String    @id @default(cuid())
+  tenantId          String
+  companyId         String?
+  title             String
+  value             Float     @default(0)
+  // Prospect | Qualified | Proposal | Won | Lost
+  stage             String    @default("Prospect")
+  expectedCloseDate DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  company Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, stage])
+  @@index([tenantId, expectedCloseDate])
+}
+
+model Activity {
+  id        String   @id @default(cuid())
+  tenantId  String
+  companyId String?
+  type      String   // call | email | meeting
+  notes     String?
+  date      DateTime @default(now())
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  company Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, companyId])
+}
+
+model Conversation {
+  id        String   @id @default(cuid())
+  tenantId  String
+  userAId   String
+  userBId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userA  User   @relation("ConversationUserA", fields: [userAId], references: [id], onDelete: Cascade)
+  userB  User   @relation("ConversationUserB", fields: [userBId], references: [id], onDelete: Cascade)
+  messages Message[]
+
+  @@index([tenantId])
+  @@unique([tenantId, userAId, userBId])
+}
+
+model Message {
+  id             String   @id @default(cuid())
+  tenantId       String
+  conversationId String
+  senderId       String
+  body           String
+  createdAt      DateTime @default(now())
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User         @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, conversationId, createdAt])
+}
+
+// ─── Audit Log ────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  tenantId   String
+  userId     String?
+  action     String   // CREATE | UPDATE | DELETE
+  resource   String   // company | deal | message ...
+  resourceId String
+  before     Json?
+  after      Json?
+  createdAt  DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, resource, resourceId])
+  @@index([tenantId, createdAt])
+}
+
+// ─── Email Verification ────────────────────────────────────────────────────────
+
+model EmailVerification {
+  email      String   @id
+  code       String
+  expiresAt  DateTime
+  attempts   Int      @default(1)
+  createdAt  DateTime @default(now())
+
+  @@map("email_verifications")
+}
