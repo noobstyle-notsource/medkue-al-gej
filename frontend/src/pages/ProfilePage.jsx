@@ -11,8 +11,8 @@ export default function ProfilePage() {
 
   if (!user) return <div>Please log in</div>;
 
-  const displayName = user.name || user.email;
-  const initials = displayName
+  const displayName = user.name || user.email || "User";
+  const initials = (displayName || "U")
     .split(" ")
     .slice(0, 2)
     .map((w) => w[0]?.toUpperCase())
