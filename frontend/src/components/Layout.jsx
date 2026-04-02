@@ -260,6 +260,12 @@ export default function LayoutShell() {
           </Descriptions>
           <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
             <Button onClick={() => setProfileModalOpen(false)}>Close</Button>
+            <Button type="default" onClick={() => {
+              setProfileModalOpen(false);
+              navigate('/profile');
+            }}>
+              View / Edit
+            </Button>
             <Button type="primary" danger onClick={handleLogout}>
               Logout
             </Button>
