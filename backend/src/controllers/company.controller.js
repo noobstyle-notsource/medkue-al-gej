@@ -4,28 +4,33 @@ const { invalidateDashboardCache } = require('./dashboard.controller');
 
 // GET /api/companies?status=Active&search=acme&sort=name&order=asc&page=1&limit=20
 const getCompanies = async (req, res) => {
-  const { status, search, sort = 'createdAt', order = 'desc', page = '1', limit = '20' } = req.query;
-  const where = { tenantId: req.user.tenantId, deletedAt: null };
+  try {
+    const { status, search, sort = 'createdAt', order = 'desc', page = '1', limit = '20' } = req.query;
+    const where = { tenantId: req.user.tenantId, deletedAt: null };
 
-  if (status) where.status = status;
-  if (search) {
-    where.OR = [
-      { name: { contains: search, mode: 'insensitive' } },
-      { email: { contains: search, mode: 'insensitive' } },
-      { phone: { contains: search, mode: 'insensitive' } },
-    ];
+    if (status) where.status = status;
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+        { phone: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const validSortFields = ['name', 'email', 'phone', 'status', 'createdAt'];
+    const sortField = validSortFields.includes(sort) ? sort : 'createdAt';
+
+    const [companies, total] = await Promise.all([
+      prisma.company.findMany({ where, orderBy: { [sortField]: order }, skip, take: parseInt(limit) }),
+      prisma.company.count({ where }),
+    ]);
+
+    res.json({ companies, total, page: parseInt(page), limit: parseInt(limit) });
+  } catch (error) {
+    console.error('getCompanies error:', error);
+    res.status(500).json({ error: error.message });
   }
-
-  const skip = (parseInt(page) - 1) * parseInt(limit);
-  const validSortFields = ['name', 'email', 'phone', 'status', 'createdAt'];
-  const sortField = validSortFields.includes(sort) ? sort : 'createdAt';
-
-  const [companies, total] = await Promise.all([
-    prisma.company.findMany({ where, orderBy: { [sortField]: order }, skip, take: parseInt(limit) }),
-    prisma.company.count({ where }),
-  ]);
-
-  res.json({ companies, total, page: parseInt(page), limit: parseInt(limit) });
 };
 
 const getCompanyById = async (req, res) => {

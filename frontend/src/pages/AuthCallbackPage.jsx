@@ -16,7 +16,7 @@ export default function AuthCallbackPage() {
     if (token) {
       setToken(token);
       login(token);
-      navigate("/login", { replace: true });
+      navigate("/", { replace: true });
       return;
     }
     navigate("/login", { replace: true });

@@ -20,10 +20,14 @@ function decodeJwt(token) {
 
 export function useAuth() {
   const [token, setTokenState] = useState(() => {
-    const ls = localStorage.getItem("crm_token") || localStorage.getItem("token");
+    const ls = localStorage.getItem("crm_token") || localStorage.getItem("crm_session_token") || localStorage.getItem("token");
     const ss = sessionStorage.getItem("crm_token");
     const cookie = getCookie("auth_token");
-    return ls || ss || cookie;
+    const t = ls || ss || cookie;
+    
+    // Strict validation: avoid "null" or "undefined" strings from leaky migrations
+    if (!t || t === "null" || t === "undefined") return null;
+    return t;
   });
 
   // Decode JWT to get user info for display (name, email, id, tenantId)

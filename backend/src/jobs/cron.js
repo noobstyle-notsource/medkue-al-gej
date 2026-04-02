@@ -1,103 +1,80 @@
 const { prisma } = require('../lib/prisma');
+const { safeAdd } = require('./queue');
 
-// Simple cron that checks for due activities explicitly marked as [REMINDER]
+/**
+ * Polls for due reminders and queues emails / chat notifications.
+ * If Redis is offline, it processes them directly.
+ */
 async function processReminders() {
   try {
     const now = new Date();
+    const { handleReminderEmail, handleReminderChat } = require('./worker');
 
-    // Find due reminders that haven't been picked up
-    const reminders = await prisma.activity.findMany({
+    // Chat-based reminders from Activity notes
+    const activities = await prisma.activity.findMany({
       where: {
         notes: { startsWith: '[REMINDER] ' },
-        date: { lte: now }
+        date: { lte: now },
+        deletedAt: null,
       },
-      include: {
-        tenant: { include: { users: { orderBy: { createdAt: 'asc' }, take: 1 } } },
-        company: true
-      }
     });
 
-    if (reminders.length === 0) return;
+    for (const r of activities) {
+      const job = await safeAdd('reminder-chat', { activityId: r.id });
+      
+      // If safeAdd returns null, Redis is likely offline -> process directly
+      if (!job) {
+        console.log(`[Cron] Redis offline: Processing chat reminder ${r.id} directly`);
+        await handleReminderChat({ activityId: r.id });
+      }
 
-    console.log(`[Cron] Processing ${reminders.length} overdue reminders into chat messages.`);
-
-    for (const r of reminders) {
-      // 1. Mark as sent immediately to avoid duplicates
-      const newNotes = r.notes.replace('[REMINDER]', '[REMINDER:SENT]');
       await prisma.activity.update({
         where: { id: r.id },
-        data: { notes: newNotes }
-      });
-
-      // 2. Identify the target user (we'll just use the first user in the tenant, the owner)
-      const targetUser = r.tenant.users[0];
-      if (!targetUser) continue;
-
-      // 3. Ensure a "System Bot" user exists for this tenant
-      let bot = await prisma.user.findFirst({
-        where: { tenantId: r.tenantId, name: 'System Reminders' }
-      });
-      if (!bot) {
-        bot = await prisma.user.create({
-          data: {
-            tenantId: r.tenantId,
-            name: 'System Reminders',
-            email: `bot_${r.tenantId}@system.local`,
-          }
-        });
-      }
-
-      // 4. Ensure a conversation exists between Bot and Target
-      let conv = await prisma.conversation.findFirst({
-        where: {
-          tenantId: r.tenantId,
-          OR: [
-            { userAId: targetUser.id, userBId: bot.id },
-            { userAId: bot.id, userBId: targetUser.id }
-          ]
-        }
-      });
-      if (!conv) {
-        conv = await prisma.conversation.create({
-          data: {
-            tenantId: r.tenantId,
-            userAId: targetUser.id,
-            userBId: bot.id,
-          }
-        });
-      }
-
-      // 5. Send the message!
-      const title = r.notes.replace('[REMINDER] ', '').split(' —')[0];
-      const detail = r.notes.split(' — ')[1] || '';
-
-      const parts = [
-        `🔔 **REMINDER ALERT**`,
-        `You have a scheduled reminder: "${title}"`
-      ];
-      if (r.company) parts.push(`👤 Client: ${r.company.name}`);
-      if (detail) parts.push(`📝 Notes: ${detail}`);
-
-      await prisma.message.create({
-        data: {
-          tenantId: r.tenantId,
-          conversationId: conv.id,
-          senderId: bot.id,
-          body: parts.join('\n')
-        }
+        data: { notes: r.notes.replace('[REMINDER]', '[REMINDER:SENT]') },
       });
     }
 
+    // Dedicated Reminder model
+    const reminders = await prisma.reminder.findMany({
+      where: { status: 'pending', dueDate: { lte: now }, deletedAt: null },
+    });
+
+    for (const rem of reminders) {
+      const job = await safeAdd('reminder-email', { reminderId: rem.id });
+      
+      if (!job) {
+        console.log(`[Cron] Redis offline: Processing email reminder ${rem.id} directly`);
+        await handleReminderEmail({ reminderId: rem.id });
+      }
+    }
   } catch (err) {
     console.error('[Cron] Reminder processor error:', err.message);
   }
 }
 
-let interval;
-function startCron() {
-  console.log('[System] Native cron processor started (Polling every 15s)');
-  processReminders(); // run once immediately
-  interval = setInterval(processReminders, 15000);
+/**
+ * Start the BullMQ repeatable cron job.
+ * Falls back to setInterval if BullMQ is unavailable.
+ */
+async function startCron(queue) {
+  if (queue) {
+    try {
+      await queue.add('cron-tick', { type: 'cron-tick' }, {
+        repeat: { pattern: '* * * * *' },
+      });
+      console.log('[Cron] BullMQ repeatable cron started (1 min interval)');
+    } catch (err) {
+      console.error('[Cron] BullMQ cron failed — falling back to setInterval:', err.message);
+      setInterval(processReminders, 60_000);
+    }
+  } else {
+    // Fallback: run directly if Redis is offline
+    console.log('[Cron] Redis offline — using setInterval fallback');
+    setInterval(processReminders, 60_000);
+  }
+
+  // Run immediately on boot
+  processReminders();
 }
 
-module.exports = { startCron };
+module.exports = { startCron, processReminders };

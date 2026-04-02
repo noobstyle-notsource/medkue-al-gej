@@ -128,11 +128,14 @@ router.get('/google/callback',
   },
   (req, res) => {
     const frontendUrl = pickFrontendUrl(req);
+    if (!req.user) return res.redirect(`${frontendUrl}/login?error=auth_failed`);
+
     const token = jwt.sign(
       { id: req.user.id, tenantId: req.user.tenantId, roleId: req.user.roleId },
       process.env.JWT_SECRET || 'change-me',
       { expiresIn: '7d' }
     );
+    // Explicitly redirect to AuthCallbackPage with token
     res.redirect(`${frontendUrl}/auth/callback?token=${token}`);
   }
 );
@@ -181,7 +184,7 @@ router.post('/register', async (req, res) => {
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
       console.log('[Auth] User already exists:', existingUser.email);
-      return res.status(400).json({ error: 'User already exists' });
+      return res.status(400).json({ error: 'A user with this email already exists. Please use a different email or try logging in.' });
     }
 
     // Hash password
@@ -297,7 +300,7 @@ router.post('/login', async (req, res) => {
     // Check password
     const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+      return res.status(401).json({ error: 'Password incorrect' });
     }
 
     // Generate token

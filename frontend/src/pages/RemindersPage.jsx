@@ -41,6 +41,7 @@ export default function RemindersPage() {
   const [loading, setLoading]     = useState(false);
   const [activities, setActivities] = useState([]);
   const [contacts, setContacts]   = useState([]);
+  const [users, setUsers]         = useState([]);
   const [creating, setCreating]   = useState(false);
   const [error, setError]         = useState(null);
   const [filter, setFilter]       = useState("upcoming"); // upcoming | past | all
@@ -57,12 +58,14 @@ export default function RemindersPage() {
     setLoading(true);
     setError(null);
     try {
-      const [aRes, cRes] = await Promise.all([
+      const [aRes, cRes, uRes] = await Promise.all([
         api.get("/activities"),
         api.get("/contacts?limit=500&page=1"),
+        api.get("/auth/users"),
       ]);
       setActivities(toList(aRes.data));
       setContacts(toList(cRes.data));
+      setUsers(toList(uRes.data));
     } catch (e) {
       setError(e?.response?.data?.message || e.message);
     } finally {
@@ -78,7 +81,7 @@ export default function RemindersPage() {
       const payload = {
         companyId: values.contactId,
         type: "meeting",    // maps to meeting; shown as reminder in UI
-        notes: `[REMINDER] ${values.title}${values.notes ? ` — ${values.notes}` : ""}`,
+        notes: `[REMINDER] ${values.title}${values.notes ? ` — ${values.notes}` : ""}${values.assignTo ? ` (assigned to ${users.find((u) => u.id === values.assignTo)?.name || users.find((u) => u.id === values.assignTo)?.email})` : ""}`,
         date: values.remindAt ? values.remindAt.toISOString() : new Date().toISOString(),
       };
       await api.post("/activities", payload);
@@ -234,6 +237,11 @@ export default function RemindersPage() {
                             👤 {contactMap[r.companyId] || r.companyId}
                           </span>
                         )}
+                        {r.notes?.includes('(assigned to') && (
+                          <span style={{ fontSize: 11, color: "var(--text-3)" }}>
+                            👥 {r.notes.split('(assigned to ')[1]?.split(')')[0]}
+                          </span>
+                        )}
                         <span style={{
                           fontSize: 11, fontWeight: 700, padding: "1px 7px",
                           borderRadius: 999, background: pc.bg, color: pc.color,
@@ -282,6 +290,13 @@ export default function RemindersPage() {
                 allowClear showSearch optionFilterProp="label"
                 placeholder="Link a contact"
                 options={contacts.map((c) => ({ value: c.id, label: c.name }))}
+              />
+            </Form.Item>
+            <Form.Item name="assignTo" label="Assign to user (optional)">
+              <Select
+                allowClear showSearch optionFilterProp="label"
+                placeholder="Assign reminder to user"
+                options={users.map((u) => ({ value: u.id, label: u.name || u.email }))}
               />
             </Form.Item>
             <Form.Item name="remindAt" label="Remind at" rules={[{ required: true }]}>

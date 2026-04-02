@@ -15,14 +15,16 @@ model Tenant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users      User[]
-  companies  Company[]
-  deals      Deal[]
-  activities Activity[]
+  users         User[]
+  companies     Company[]
+  deals         Deal[]
+  activities    Activity[]
   conversations Conversation[]
   messages      Message[]
-  roles      Role[]
-  auditLogs  AuditLog[]
+  roles         Role[]
+  auditLogs     AuditLog[]
+  reminders     Reminder[]     @relation("TenantReminders")
+  notifications Notification[] @relation("TenantNotifications")
 }
 
 // ─── RBAC ─────────────────────────────────────────────────────────────────────
@@ -43,24 +45,26 @@ model Role {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  tenantId     String
-  email        String   @unique
-  name         String
-  password     String?  // For email/password auth
-  emailVerified Boolean  @default(false)
-  emailPreference String @default("send") // "send", "forward", "none"
-  googleId     String?  @unique
-  roleId       String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id              String   @id @default(cuid())
+  tenantId        String
+  email           String   @unique
+  name            String
+  password        String? // For email/password auth
+  emailVerified   Boolean  @default(false)
+  emailPreference String   @default("send") // "send", "forward", "none"
+  googleId        String?  @unique
+  roleId          String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  role      Role?      @relation(fields: [roleId], references: [id], onDelete: SetNull)
-  auditLogs AuditLog[]
+  tenant         Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  role           Role?          @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  auditLogs      AuditLog[]
   conversationsA Conversation[] @relation("ConversationUserA")
   conversationsB Conversation[] @relation("ConversationUserB")
   sentMessages   Message[]      @relation("MessageSender")
+  reminders      Reminder[]     @relation("UserReminders")
+  notifications  Notification[] @relation("UserNotifications")
 
   @@index([tenantId])
 }
@@ -81,6 +85,7 @@ model Company {
   tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   deals      Deal[]
   activities Activity[]
+  Reminder   Reminder[]
 
   @@index([tenantId, deletedAt])
   @@index([tenantId, status])
@@ -95,28 +100,49 @@ model Deal {
   // Prospect | Qualified | Proposal | Won | Lost
   stage             String    @default("Prospect")
   expectedCloseDate DateTime?
+  deletedAt         DateTime? // Soft delete
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   company Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
-  @@index([tenantId, stage])
+  @@index([tenantId, stage, deletedAt])
   @@index([tenantId, expectedCloseDate])
 }
 
 model Activity {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   tenantId  String
   companyId String?
-  type      String   // call | email | meeting
+  type      String // call | email | meeting
   notes     String?
-  date      DateTime @default(now())
+  date      DateTime  @default(now())
+  deletedAt DateTime? // Soft delete
 
-  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   company Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
-  @@index([tenantId, companyId])
+  @@index([tenantId, companyId, deletedAt])
+}
+
+model Reminder {
+  id        String    @id @default(cuid())
+  tenantId  String
+  userId    String
+  companyId String?
+  message   String
+  dueDate   DateTime
+  status    String    @default("pending") // pending | sent | cancelled
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? // Soft delete
+
+  tenant  Tenant   @relation("TenantReminders", fields: [tenantId], references: [id], onDelete: Cascade)
+  user    User     @relation("UserReminders", fields: [userId], references: [id], onDelete: Cascade)
+  company Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status, dueDate, deletedAt])
 }
 
 model Conversation {
@@ -127,13 +153,13 @@ model Conversation {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  userA  User   @relation("ConversationUserA", fields: [userAId], references: [id], onDelete: Cascade)
-  userB  User   @relation("ConversationUserB", fields: [userBId], references: [id], onDelete: Cascade)
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userA    User      @relation("ConversationUserA", fields: [userAId], references: [id], onDelete: Cascade)
+  userB    User      @relation("ConversationUserB", fields: [userBId], references: [id], onDelete: Cascade)
   messages Message[]
 
-  @@index([tenantId])
   @@unique([tenantId, userAId, userBId])
+  @@index([tenantId])
 }
 
 model Message {
@@ -157,8 +183,8 @@ model AuditLog {
   id         String   @id @default(cuid())
   tenantId   String
   userId     String?
-  action     String   // CREATE | UPDATE | DELETE
-  resource   String   // company | deal | message ...
+  action     String // CREATE | UPDATE | DELETE
+  resource   String // company | deal | message ...
   resourceId String
   before     Json?
   after      Json?
@@ -173,12 +199,38 @@ model AuditLog {
 
 // ─── Email Verification ────────────────────────────────────────────────────────
 
+// ─── Notifications (In-App) ───────────────────────────────────────────────────
+
+model Notification {
+  id              String   @id @default(cuid())
+  tenantId        String
+  userId          String
+  type            String   // reminder | deal_won | deal_lost | activity_logged | deal_created | etc
+  title           String
+  message         String
+  relatedEntity   String?  // deal | company | reminder | etc
+  relatedEntityId String?  // ID of the deal/company/etc
+  isRead          Boolean  @default(false)
+  readAt          DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant Tenant @relation("TenantNotifications", fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, userId, isRead])
+  @@index([tenantId, userId, createdAt])
+  @@index([userId, isRead])
+}
+
+// ─── Email Verification ────────────────────────────────────────────────────────
+
 model EmailVerification {
-  email      String   @id
-  code       String
-  expiresAt  DateTime
-  attempts   Int      @default(1)
-  createdAt  DateTime @default(now())
+  email     String   @id
+  code      String
+  expiresAt DateTime
+  attempts  Int      @default(1)
+  createdAt DateTime @default(now())
 
   @@map("email_verifications")
 }

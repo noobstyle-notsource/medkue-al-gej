@@ -11,6 +11,7 @@ import DealDetailsPage from "./pages/DealDetailsPage.jsx";
 import DealsPipelinePage from "./pages/DealsPipelinePage.jsx";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
+import ProfilePage from "./pages/ProfilePage.jsx";
 import RemindersPage from "./pages/RemindersPage.jsx";
 import ResetPasswordPage from "./pages/ResetPasswordPage.jsx";
 import TimelinePage from "./pages/TimelinePage.jsx";
@@ -41,6 +42,7 @@ export default function App() {
         <Route path="conversations"     element={<ConversationsPage />} />
         <Route path="csv"               element={<CsvPage />} />
         <Route path="audit"             element={<AuditLogPage />} />
+        <Route path="profile"           element={<ProfilePage />} />
       </Route>
 
       {/* Fallback */}

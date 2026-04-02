@@ -9,9 +9,11 @@ import {
   MessageOutlined,
   TeamOutlined,
 } from "@ant-design/icons";
-import { Layout, Tooltip } from "antd";
+import { Layout, Tooltip, Modal, Avatar, Descriptions, Button } from "antd";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "./useAuth.js";
+import NotificationBell from "./NotificationBell.jsx";
+import { useState } from "react";
 
 const { Sider, Header, Content } = Layout;
 
@@ -47,7 +49,9 @@ export default function LayoutShell() {
   const navigate = useNavigate();
   const location = useLocation();
   const { logout, user } = useAuth();
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
 
+  const isAdmin = user?.email === 'misheelmother@gmail.com';
   const currentPath =
     location.pathname === "/"
       ? "/"
@@ -59,6 +63,8 @@ export default function LayoutShell() {
     logout();
     navigate("/login");
   }
+
+  const roleLabel = isAdmin ? 'Admin' : 'Member';
 
   // Derive initials and display name from JWT payload
   const displayName = user?.name || user?.email || "My Account";
@@ -105,6 +111,7 @@ export default function LayoutShell() {
               </div>
               <div style={{ padding: "0 8px", display: "flex", flexDirection: "column", gap: 2 }}>
                 {group.keys.map((key) => {
+                  if (key === '/audit' && !isAdmin) return null;
                   const item = NAV_ITEMS.find((n) => n.key === key);
                   if (!item) return null;
                   const isActive = key === "/" ? currentPath === "/" : currentPath === key;
@@ -153,20 +160,19 @@ export default function LayoutShell() {
           {/* Spacer */}
           <div style={{ flex: 1 }} />
 
-          {/* User card + Logout */}
+          {/* User card + Profile */}
           <div style={{ padding: "12px 8px", borderTop: "1px solid var(--border)" }}>
-            <Tooltip title="Click to sign out" placement="right">
-              <div className="srm-user-card" onClick={handleLogout}>
+            <Tooltip title="Click to view profile" placement="right">
+              <div className="srm-user-card" onClick={() => setProfileModalOpen(true)}>
                 <div className="srm-avatar" style={{ fontSize: 11 }}>{initials}</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div className="srm-user-name" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {displayName}
                   </div>
                   <div className="srm-user-role">
-                    {user?.roleId ? "Member" : "User"}
+                    {roleLabel}
                   </div>
                 </div>
-                <LogoutOutlined style={{ marginLeft: "auto", fontSize: 13, color: "var(--text-3)", flexShrink: 0 }} />
               </div>
             </Tooltip>
           </div>
@@ -198,6 +204,7 @@ export default function LayoutShell() {
               <div style={{ fontSize: 12, color: "var(--text-3)" }}>
                 {new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
               </div>
+              <NotificationBell />
             </div>
           </div>
         </Header>
@@ -208,6 +215,41 @@ export default function LayoutShell() {
           </div>
         </Content>
       </Layout>
+
+      {/* Profile Modal */}
+      <Modal
+        title={null}
+        open={profileModalOpen}
+        onCancel={() => setProfileModalOpen(false)}
+        footer={null}
+        centered
+        width={400}
+        styles={{ body: { padding: 0, background: 'var(--surface)', color: 'var(--text)' } }}
+      >
+        <div style={{ textAlign: "center", padding: "24px", color: 'var(--text)' }}>
+          <Avatar size={80} style={{ backgroundColor: "#1890ff", marginBottom: 16 }}>
+            {initials}
+          </Avatar>
+          <h2 style={{ marginBottom: 8, color: 'var(--text)' }}>{displayName}</h2>
+          <Descriptions
+            bordered
+            column={1}
+            size="small"
+            style={{ marginBottom: 24, color: 'var(--text)' }}
+          >
+            <Descriptions.Item label="Name" labelStyle={{ color: 'var(--text-3)' }} contentStyle={{ color: 'var(--text)' }}>{user?.name || "N/A"}</Descriptions.Item>
+            <Descriptions.Item label="Email" labelStyle={{ color: 'var(--text-3)' }} contentStyle={{ color: 'var(--text)' }}>{user?.email}</Descriptions.Item>
+            <Descriptions.Item label="Role" labelStyle={{ color: 'var(--text-3)' }} contentStyle={{ color: 'var(--text)' }}>{roleLabel}</Descriptions.Item>
+            <Descriptions.Item label="Tenant ID" labelStyle={{ color: 'var(--text-3)' }} contentStyle={{ color: 'var(--text)' }}>{user?.tenantId}</Descriptions.Item>
+          </Descriptions>
+          <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+            <Button onClick={() => setProfileModalOpen(false)}>Close</Button>
+            <Button type="primary" danger onClick={handleLogout}>
+              Logout
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </Layout>
   );
 }
