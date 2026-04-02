@@ -9,7 +9,6 @@ import CsvPage from "./pages/CsvPage.jsx";
 import DashboardPage from "./pages/DashboardPage.jsx";
 import DealDetailsPage from "./pages/DealDetailsPage.jsx";
 import DealsPipelinePage from "./pages/DealsPipelinePage.jsx";
-import EditProfilePage from "./pages/EditProfilePage.jsx";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
 import ProfilePage from "./pages/ProfilePage.jsx";
@@ -44,7 +43,6 @@ export default function App() {
         <Route path="csv"               element={<CsvPage />} />
         <Route path="audit"             element={<AuditLogPage />} />
         <Route path="profile"           element={<ProfilePage />} />
-        <Route path="profile/edit"     element={<EditProfilePage />} />
       </Route>
 
       {/* Fallback */}

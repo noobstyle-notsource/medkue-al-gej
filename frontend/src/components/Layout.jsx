@@ -5,12 +5,13 @@ import {
   BulbOutlined,
   ClockCircleOutlined,
   ContainerOutlined,
+  EditOutlined,
   FileExcelOutlined,
   LogoutOutlined,
   MessageOutlined,
   TeamOutlined,
 } from "@ant-design/icons";
-import { Layout, Tooltip, Modal, Avatar, Descriptions, Button } from "antd";
+import { Layout, Tooltip, Modal, Avatar, Descriptions, Button, Form, Input, message } from "antd";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "./useAuth.js";
 import NotificationBell from "./NotificationBell.jsx";
@@ -49,8 +50,11 @@ const NAV_GROUPS = [
 export default function LayoutShell() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { logout, user } = useAuth();
+  const { logout, user, refreshProfile } = useAuth();
   const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form] = Form.useForm();
   const [theme, setTheme] = useState(() => {
     return localStorage.getItem("srm-theme") || "dark";
   });
@@ -72,6 +76,39 @@ export default function LayoutShell() {
     logout();
     navigate("/login");
   }
+
+  const handleEditProfile = () => {
+    form.setFieldsValue({ name: user?.name, email: user?.email });
+    setEditMode(true);
+  };
+
+  const handleCancelEdit = () => {
+    setEditMode(false);
+    form.resetFields();
+  };
+
+  const handleSaveProfile = async (values) => {
+    setSaving(true);
+    try {
+      console.log("[Layout] Updating profile:", values);
+      await fetch('/api/auth/me', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('crm_token') || sessionStorage.getItem('crm_token')}`
+        },
+        body: JSON.stringify(values)
+      });
+      message.success("Profile updated successfully!");
+      await refreshProfile();
+      setEditMode(false);
+    } catch (err) {
+      console.error("[Layout] Profile update failed:", err);
+      message.error(err?.response?.data?.error || "Failed to update profile");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const roleLabel = isAdmin ? 'Admin' : 'Member';
 
@@ -236,41 +273,87 @@ export default function LayoutShell() {
       <Modal
         title={null}
         open={profileModalOpen}
-        onCancel={() => setProfileModalOpen(false)}
+        onCancel={() => {
+          setProfileModalOpen(false);
+          setEditMode(false);
+          form.resetFields();
+        }}
         footer={null}
         centered
-        width={400}
+        width={editMode ? 500 : 400}
         styles={{ body: { padding: 0, background: 'var(--surface)', color: 'var(--text)' } }}
       >
-        <div style={{ textAlign: "center", padding: "24px", color: 'var(--text)' }}>
-          <Avatar size={80} style={{ backgroundColor: "#1890ff", marginBottom: 16 }}>
-            {initials}
-          </Avatar>
-          <h2 style={{ marginBottom: 8, color: 'var(--text)' }}>{displayName}</h2>
-          <Descriptions
-            bordered
-            column={1}
-            size="small"
-            style={{ marginBottom: 24, color: 'var(--text)' }}
-          >
-            <Descriptions.Item label="Name" labelStyle={{ color: 'var(--text-3)' }} contentStyle={{ color: 'var(--text)' }}>{user?.name || "N/A"}</Descriptions.Item>
-            <Descriptions.Item label="Email" labelStyle={{ color: 'var(--text-3)' }} contentStyle={{ color: 'var(--text)' }}>{user?.email}</Descriptions.Item>
-            <Descriptions.Item label="Role" labelStyle={{ color: 'var(--text-3)' }} contentStyle={{ color: 'var(--text)' }}>{roleLabel}</Descriptions.Item>
-            <Descriptions.Item label="Tenant ID" labelStyle={{ color: 'var(--text-3)' }} contentStyle={{ color: 'var(--text)' }}>{user?.tenantId}</Descriptions.Item>
-          </Descriptions>
-          <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
-            <Button onClick={() => setProfileModalOpen(false)}>Close</Button>
-            <Button type="default" onClick={() => {
-              setProfileModalOpen(false);
-              navigate('/profile');
-            }}>
-              View / Edit
-            </Button>
-            <Button type="primary" danger onClick={handleLogout}>
-              Logout
-            </Button>
+        {editMode ? (
+          // Edit Mode
+          <div style={{ padding: "24px", color: 'var(--text)' }}>
+            <div style={{ textAlign: "center", marginBottom: 24 }}>
+              <Avatar size={64} style={{ backgroundColor: "#1890ff", marginBottom: 16 }}>
+                {initials}
+              </Avatar>
+              <h2 style={{ marginBottom: 8, color: 'var(--text)' }}>Edit Profile</h2>
+            </div>
+
+            <Form
+              form={form}
+              layout="vertical"
+              onFinish={handleSaveProfile}
+            >
+              <Form.Item
+                name="name"
+                label={<span style={{ color: 'var(--text)' }}>Name</span>}
+                rules={[{ required: true, message: "Please enter your name" }]}
+              >
+                <Input placeholder="Full Name" />
+              </Form.Item>
+
+              <Form.Item
+                name="email"
+                label={<span style={{ color: 'var(--text)' }}>Email</span>}
+                rules={[
+                  { required: true, message: "Please enter your email" },
+                  { type: "email", message: "Please enter a valid email" }
+                ]}
+              >
+                <Input placeholder="Email address" />
+              </Form.Item>
+
+              <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", marginTop: 24 }}>
+                <Button onClick={handleCancelEdit}>Cancel</Button>
+                <Button type="primary" htmlType="submit" loading={saving} icon={<EditOutlined />}>
+                  Save Changes
+                </Button>
+              </div>
+            </Form>
           </div>
-        </div>
+        ) : (
+          // View Mode
+          <div style={{ textAlign: "center", padding: "24px", color: 'var(--text)' }}>
+            <Avatar size={80} style={{ backgroundColor: "#1890ff", marginBottom: 16 }}>
+              {initials}
+            </Avatar>
+            <h2 style={{ marginBottom: 8, color: 'var(--text)' }}>{displayName}</h2>
+            <Descriptions
+              bordered
+              column={1}
+              size="small"
+              style={{ marginBottom: 24, color: 'var(--text)' }}
+            >
+              <Descriptions.Item label="Name" labelStyle={{ color: 'var(--text-3)' }} contentStyle={{ color: 'var(--text)' }}>{user?.name || "N/A"}</Descriptions.Item>
+              <Descriptions.Item label="Email" labelStyle={{ color: 'var(--text-3)' }} contentStyle={{ color: 'var(--text)' }}>{user?.email}</Descriptions.Item>
+              <Descriptions.Item label="Role" labelStyle={{ color: 'var(--text-3)' }} contentStyle={{ color: 'var(--text)' }}>{roleLabel}</Descriptions.Item>
+              <Descriptions.Item label="Tenant ID" labelStyle={{ color: 'var(--text-3)' }} contentStyle={{ color: 'var(--text)' }}>{user?.tenantId}</Descriptions.Item>
+            </Descriptions>
+            <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+              <Button onClick={() => setProfileModalOpen(false)}>Close</Button>
+              <Button type="default" onClick={handleEditProfile} icon={<EditOutlined />}>
+                View / Edit
+              </Button>
+              <Button type="primary" danger onClick={handleLogout}>
+                Logout
+              </Button>
+            </div>
+          </div>
+        )}
       </Modal>
     </Layout>
   );
