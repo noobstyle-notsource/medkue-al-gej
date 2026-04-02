@@ -2,6 +2,7 @@ import {
   AppstoreOutlined,
   AuditOutlined,
   BellOutlined,
+  BulbOutlined,
   ClockCircleOutlined,
   ContainerOutlined,
   FileExcelOutlined,
@@ -13,7 +14,7 @@ import { Layout, Tooltip, Modal, Avatar, Descriptions, Button } from "antd";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "./useAuth.js";
 import NotificationBell from "./NotificationBell.jsx";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const { Sider, Header, Content } = Layout;
 
@@ -50,6 +51,14 @@ export default function LayoutShell() {
   const location = useLocation();
   const { logout, user } = useAuth();
   const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [theme, setTheme] = useState(() => {
+    return localStorage.getItem("srm-theme") || "dark";
+  });
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem("srm-theme", theme);
+  }, [theme]);
 
   const isAdmin = user?.email === 'misheelmother@gmail.com';
   const currentPath =
@@ -200,7 +209,14 @@ export default function LayoutShell() {
                 </div>
               )}
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <Button
+                shape="circle"
+                icon={<BulbOutlined />}
+                onClick={() => setTheme((prev) => (prev === "dark" ? "light" : "dark"))}
+                style={{ borderColor: "var(--border)", color: "var(--text-2)", height: 36, width: 36 }}
+                title="Toggle theme"
+              />
               <div style={{ fontSize: 12, color: "var(--text-3)" }}>
                 {new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
               </div>
