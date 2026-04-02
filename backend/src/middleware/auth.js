@@ -36,8 +36,9 @@ const requirePermission = (permission) => async (req, res, next) => {
       return next();
     }
     res.status(403).json({ error: 'Insufficient permissions', required: permission });
-  } catch {
-    res.status(500).json({ error: 'Permission check failed' });
+  } catch (err) {
+    console.error('[Auth Middleware] Error in requirePermission:', err);
+    res.status(500).json({ error: 'Permission check failed', details: err.message });
   }
 };
 

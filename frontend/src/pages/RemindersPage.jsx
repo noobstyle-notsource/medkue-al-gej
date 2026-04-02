@@ -192,8 +192,10 @@ export default function RemindersPage() {
               reminders.map((r, i) => {
                 const d = new Date(r.date);
                 const isOverdue = d < new Date();
-                const title = r.notes?.replace("[REMINDER] ", "")?.split(" — ")[0];
-                const note  = r.notes?.split(" — ")[1] || "";
+                const isSent = r.notes?.includes("[REMINDER:SENT]");
+                const rawTitle = r.notes?.replace("[REMINDER:SENT] ", "")?.replace("[REMINDER] ", "");
+                const title = rawTitle?.split(" — ")[0];
+                const note  = rawTitle?.split(" — ")[1] || "";
                 const pc = isOverdue ? PRIORITY_COLORS.high : PRIORITY_COLORS.low;
 
                 return (
