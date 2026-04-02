@@ -1,8 +1,13 @@
-import { Card, Avatar, Descriptions, Button } from "antd";
+import { Card, Avatar, Descriptions, Button, Modal, Form, Input, message, Tag } from "antd";
+import { useState } from "react";
+import { api } from "../api/client.js";
 import { useAuth } from "../components/useAuth.js";
 
 export default function ProfilePage() {
-  const { user } = useAuth();
+  const { user, refreshProfile } = useAuth();
+  const [editOpen, setEditOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form] = Form.useForm();
 
   if (!user) return <div>Please log in</div>;
 
@@ -13,28 +18,94 @@ export default function ProfilePage() {
     .map((w) => w[0]?.toUpperCase())
     .join("") || "U";
 
+  const roleLabel = user.role?.name || "Member";
+  const authProvider = user.googleId ? "Google" : "Email/Password";
+
+  const openEditor = () => {
+    form.setFieldsValue({ name: user.name, email: user.email });
+    setEditOpen(true);
+  };
+
+  const onUpdate = async (values) => {
+    setSaving(true);
+    try {
+      await api.patch("/auth/me", values);
+      message.success("Profile updated successfully");
+      setEditOpen(false);
+      await refreshProfile();
+    } catch (err) {
+      console.error("Profile update failed", err);
+      message.error(err?.response?.data?.error || "Failed to update profile");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div style={{ padding: 24 }}>
-      <Card title="My Profile" style={{ maxWidth: 600 }}>
+      <Card title="My Profile" style={{ maxWidth: 620 }}>
         <div style={{ display: "flex", alignItems: "center", marginBottom: 24 }}>
           <Avatar size={64} style={{ backgroundColor: "#1890ff", marginRight: 16 }}>
             {initials}
           </Avatar>
           <div>
-            <h2>{displayName}</h2>
-            <p>{user.email}</p>
+            <h2 style={{ marginBottom: 4 }}>{displayName}</h2>
+            <p style={{ margin: 0 }}>{user.email}</p>
+            <div style={{ marginTop: 6, display: "flex", gap: 8 }}>
+              <Tag color={user.googleId ? "cyan" : "blue"} style={{ fontWeight: 700 }}>
+                {authProvider} login
+              </Tag>
+              <Tag color={roleLabel === "Admin" ? "volcano" : "green"}>{roleLabel}</Tag>
+            </div>
           </div>
         </div>
+
         <Descriptions bordered column={1}>
           <Descriptions.Item label="Name">{user.name || "N/A"}</Descriptions.Item>
           <Descriptions.Item label="Email">{user.email}</Descriptions.Item>
-          <Descriptions.Item label="Role">Member</Descriptions.Item>
-          <Descriptions.Item label="Tenant ID">{user.tenantId}</Descriptions.Item>
+          <Descriptions.Item label="Role">{roleLabel}</Descriptions.Item>
+          <Descriptions.Item label="Tenant ID">{user.tenant?.id || user.tenantId}</Descriptions.Item>
+          <Descriptions.Item label="Provider">{authProvider}</Descriptions.Item>
         </Descriptions>
+
         <div style={{ marginTop: 16 }}>
-          <Button type="primary">Edit Profile</Button>
+          <Button type="primary" onClick={openEditor}>
+            Edit Profile
+          </Button>
         </div>
       </Card>
+
+      <Modal
+        title="Edit Profile"
+        open={editOpen}
+        onCancel={() => setEditOpen(false)}
+        onOk={() => form.submit()}
+        okText="Save"
+        cancelText="Cancel"
+        confirmLoading={saving}
+      >
+        <Form form={form} layout="vertical" onFinish={onUpdate}>
+          <Form.Item
+            name="name"
+            label="Name"
+            rules={[{ required: true, message: "Please enter your name" }]}
+          >
+            <Input placeholder="Full Name" />
+          </Form.Item>
+
+          <Form.Item
+            name="email"
+            label="Email"
+            rules={[{ required: true, type: "email", message: "Please enter a valid email" }]}
+          >
+            <Input placeholder="Email" />
+          </Form.Item>
+
+          <Form.Item label="Login method">
+            <Input value={authProvider} disabled />
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   );
 }

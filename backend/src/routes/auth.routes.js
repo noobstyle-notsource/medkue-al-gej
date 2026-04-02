@@ -4,6 +4,8 @@ const { Strategy: GoogleStrategy } = require('passport-google-oauth20');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const { prisma } = require('../lib/prisma');
+const { authenticate } = require('../middleware/auth');
+const { audit } = require('../lib/audit');
 
 const router = Router();
 
@@ -140,15 +142,54 @@ router.get('/google/callback',
   }
 );
 
-router.get('/me', async (req, res) => {
-  const token = req.headers['authorization']?.replace('Bearer ', '');
-  if (!token) return res.status(401).json({ error: 'No token' });
+router.get('/me', authenticate, async (req, res) => {
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'change-me');
-    const user = await prisma.user.findUnique({ where: { id: decoded.id }, include: { role: true, tenant: true } });
+    const user = await prisma.user.findUnique({ where: { id: req.user.id }, include: { role: true, tenant: true } });
+    if (!user) return res.status(404).json({ error: 'User not found' });
     res.json(user);
-  } catch {
-    res.status(401).json({ error: 'Invalid token' });
+  } catch (error) {
+    console.error('[Auth] GET /me error:', error.message);
+    res.status(500).json({ error: 'Failed to retrieve user' });
+  }
+});
+
+router.patch('/me', authenticate, async (req, res) => {
+  try {
+    const { name, email } = req.body;
+    if (!name && !email) return res.status(400).json({ error: 'Name or email is required' });
+
+    const existing = await prisma.user.findUnique({ where: { id: req.user.id } });
+    if (!existing) return res.status(404).json({ error: 'User not found' });
+
+    if (email && email !== existing.email) {
+      const otherUser = await prisma.user.findUnique({ where: { email } });
+      if (otherUser) return res.status(409).json({ error: 'Email already in use' });
+    }
+
+    const before = { id: existing.id, name: existing.name, email: existing.email };
+
+    const updated = await prisma.user.update({
+      where: { id: req.user.id },
+      data: {
+        name: name || existing.name,
+        email: email || existing.email,
+      },
+    });
+
+    await audit({
+      tenantId: req.user.tenantId,
+      userId: req.user.id,
+      action: 'UPDATE',
+      resource: 'user',
+      resourceId: req.user.id,
+      before,
+      after: { id: updated.id, name: updated.name, email: updated.email },
+    });
+
+    res.json(updated);
+  } catch (error) {
+    console.error('[Auth] PATCH /me error:', error.message);
+    res.status(500).json({ error: 'Failed to update profile' });
   }
 });
 

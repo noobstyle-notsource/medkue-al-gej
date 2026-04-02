@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { clearToken, setToken } from "../api/client.js";
+import { api, clearToken, setToken } from "../api/client.js";
 
 function getCookie(name) {
   const v = document.cookie.match(`(^|;) ?${name}=([^;]*)(;|$)`);
@@ -24,23 +24,50 @@ export function useAuth() {
     const ss = sessionStorage.getItem("crm_token");
     const cookie = getCookie("auth_token");
     const t = ls || ss || cookie;
-    
-    // Strict validation: avoid "null" or "undefined" strings from leaky migrations
+
     if (!t || t === "null" || t === "undefined") return null;
     return t;
   });
 
-  // Decode JWT to get user info for display (name, email, id, tenantId)
+  const [profile, setProfile] = useState(null);
+
   const user = useMemo(() => {
+    if (profile) return profile;
     if (!token) return null;
     return decodeJwt(token);
-  }, [token]);
+  }, [profile, token]);
 
   const isAuthed = useMemo(() => Boolean(token), [token]);
 
+  const refreshProfile = async () => {
+    if (!token) {
+      setProfile(null);
+      return;
+    }
+
+    try {
+      const res = await api.get("/auth/me");
+      setProfile(res.data);
+    } catch (err) {
+      console.warn("[useAuth] refreshProfile failed", err.message);
+      clearToken();
+      setTokenState(null);
+      setProfile(null);
+    }
+  };
+
   useEffect(() => {
-    const onStorage = () =>
+    if (token) {
+      refreshProfile();
+    } else {
+      setProfile(null);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    const onStorage = () => {
       setTokenState(localStorage.getItem("crm_token") || sessionStorage.getItem("crm_token") || localStorage.getItem("token"));
+    };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
   }, []);
@@ -64,5 +91,5 @@ export function useAuth() {
     setTokenState(null);
   };
 
-  return { token, isAuthed, login, logout, user };
+  return { token, isAuthed, login, logout, user, refreshProfile };
 }
