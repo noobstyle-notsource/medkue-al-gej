@@ -28,13 +28,24 @@ export default function ProfilePage() {
 
   const onUpdate = async (values) => {
     setSaving(true);
+    console.log("[ProfilePage] Starting profile update with:", values);
     try {
-      await api.patch("/auth/me", values);
+      console.log("[ProfilePage] Calling PATCH /auth/me");
+      const res = await api.patch("/auth/me", values);
+      console.log("[ProfilePage] Update successful:", res.data);
       message.success("Profile updated successfully");
       setEditOpen(false);
+      
+      console.log("[ProfilePage] Calling refreshProfile");
       await refreshProfile();
+      console.log("[ProfilePage] Profile refreshed successfully");
     } catch (err) {
-      console.error("Profile update failed", err);
+      console.error("[ProfilePage] Profile update failed:", {
+        message: err.message,
+        status: err?.response?.status,
+        data: err?.response?.data,
+        stack: err.stack
+      });
       message.error(err?.response?.data?.error || "Failed to update profile");
     } finally {
       setSaving(false);
