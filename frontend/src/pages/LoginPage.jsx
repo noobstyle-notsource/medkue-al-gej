@@ -33,9 +33,10 @@ export default function LoginPage() {
   const [error, setError] = useState(null);
   const [mode, setMode] = useState("login");
   const [loading, setLoading] = useState(false);
+  const [rememberMode, setRememberMode] = useState(true);
 
   function startGoogleLogin() {
-    window.location.href = "http://localhost:3000/api/auth/google";
+    window.location.href = `http://localhost:3000/api/auth/google?remember=${rememberMode ? 'true' : 'false'}`;
   }
 
   async function onRegister(values) {
@@ -319,7 +320,11 @@ export default function LoginPage() {
                     </Form.Item>
 
                     <Form.Item name="remember" valuePropName="checked" style={{ marginTop: 12, marginBottom: 12 }}>
-                      <Checkbox style={{ color: "#cbd5e1", fontSize: 13 }}>
+                      <Checkbox
+                        checked={rememberMode}
+                        onChange={(e) => setRememberMode(e.target.checked)}
+                        style={{ color: "#cbd5e1", fontSize: 13 }}
+                      >
                         Remember me for 30 days
                       </Checkbox>
                     </Form.Item>

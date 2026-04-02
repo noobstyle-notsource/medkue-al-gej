@@ -113,32 +113,60 @@ passport.use(new GoogleStrategy(
 
 router.get('/google', (req, res, next) => {
   const frontendUrl = pickFrontendUrl(req);
+  const remember = req.query.remember === 'false' ? 'false' : 'true';
+  const state = Buffer.from(JSON.stringify({ frontendUrl, remember })).toString('base64');
+
   passport.authenticate('google', {
     scope: ['profile', 'email'],
     session: false,
-    state: frontendUrl,
+    state,
   })(req, res, next);
 });
 
 router.get('/google/callback',
   (req, res, next) => {
-    const frontendUrl = pickFrontendUrl(req);
+    const defaultUrl = pickFrontendUrl(req);
+    let frontendUrl = defaultUrl;
+    let remember = 'true';
+
+    if (req.query.state) {
+      try {
+        const decoded = JSON.parse(Buffer.from(req.query.state, 'base64').toString('utf8'));
+        if (decoded?.frontendUrl) frontendUrl = decoded.frontendUrl;
+        if (decoded?.remember) remember = decoded.remember;
+      } catch (err) {
+        console.warn('[Auth] Invalid callback state data', err.message);
+      }
+    }
+
     passport.authenticate('google', {
       session: false,
       failureRedirect: `${frontendUrl}/login?error=1`,
     })(req, res, next);
   },
   (req, res) => {
-    const frontendUrl = pickFrontendUrl(req);
-    if (!req.user) return res.redirect(`${frontendUrl}/login?error=auth_failed`);
+    let callbackUrl = pickFrontendUrl(req);
+    let remember = 'true';
+
+    if (req.query.state) {
+      try {
+        const decoded = JSON.parse(Buffer.from(req.query.state, 'base64').toString('utf8'));
+        if (decoded?.frontendUrl) callbackUrl = decoded.frontendUrl;
+        if (decoded?.remember) remember = decoded.remember;
+      } catch (err) {
+        console.warn('[Auth] Invalid callback state data', err.message);
+      }
+    }
+
+    if (!req.user) return res.redirect(`${callbackUrl}/login?error=auth_failed`);
 
     const token = jwt.sign(
       { id: req.user.id, tenantId: req.user.tenantId, roleId: req.user.roleId },
       process.env.JWT_SECRET || 'change-me',
       { expiresIn: '7d' }
     );
-    // Explicitly redirect to AuthCallbackPage with token
-    res.redirect(`${frontendUrl}/auth/callback?token=${token}`);
+
+    res.redirect(`${callbackUrl}/auth/callback?token=${token}&remember=${remember}`);
   }
 );
 

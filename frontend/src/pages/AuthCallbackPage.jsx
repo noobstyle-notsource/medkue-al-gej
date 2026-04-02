@@ -13,9 +13,12 @@ export default function AuthCallbackPage() {
 
   useEffect(() => {
     const token = params.get("token");
+    const remember = params.get("remember");
+
     if (token) {
-      setToken(token);
-      login(token);
+      const stay = remember === "false" ? false : true;
+      setToken(token, stay);
+      login(token, stay);
       navigate("/", { replace: true });
       return;
     }
