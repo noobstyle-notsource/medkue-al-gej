@@ -76,7 +76,7 @@ passport.use(new GoogleStrategy(
             ],
           },
         });
-        
+
         // Create regular User role with limited permissions
         const userRole = await prisma.role.create({
           data: {
@@ -90,7 +90,7 @@ passport.use(new GoogleStrategy(
             ],
           },
         });
-        
+
         user = await prisma.user.create({
           data: {
             tenantId: tenant.id,
@@ -168,30 +168,38 @@ router.get('/users', async (req, res) => {
 
 // Traditional email/password registration
 router.post('/register', async (req, res) => {
+  console.log('[Auth] Register request body:', req.body);
   try {
     const { email, password, name, organizationName } = req.body;
-    
+
     if (!email || !password || !name) {
+      console.log('[Auth] Validation failed:', { email: !!email, password: !!password, name: !!name });
       return res.status(400).json({ error: 'Email, password, and name are required' });
     }
 
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
+      console.log('[Auth] User already exists:', existingUser.email);
       return res.status(400).json({ error: 'User already exists' });
     }
 
     // Hash password
+    console.log('[Auth] Hashing password...');
     const hashedPassword = await bcrypt.hash(password, 10);
+    console.log('[Auth] Password hashed successfully');
 
     // Create tenant and roles
-    const tenant = await prisma.tenant.create({ 
-      data: { name: organizationName || `${name}'s Organization` } 
+    console.log('[Auth] Creating tenant with name:', organizationName || `${name}'s Organization`);
+    const tenant = await prisma.tenant.create({
+      data: { name: organizationName || `${name}'s Organization` }
     });
-    
+    console.log('[Auth] Tenant created:', tenant.id);
+
     const adminRole = await prisma.role.create({
       data: { tenantId: tenant.id, name: 'Admin', permissions: ['*'] },
     });
+    console.log('[Auth] Admin role created:', adminRole.id);
 
     await prisma.role.create({
       data: {
@@ -262,15 +270,17 @@ router.post('/register', async (req, res) => {
 
 // Traditional email/password login
 router.post('/login', async (req, res) => {
+  console.log('[Auth] Login request body:', req.body);
   try {
     const { identifier, password } = req.body;
-    
+
     if (!identifier || !password) {
+      console.log('[Auth] Login validation failed:', { identifier: !!identifier, password: !!password });
       return res.status(400).json({ error: 'Username/email and password are required' });
     }
 
     // Find user by email OR username(name)
-    const user = await prisma.user.findFirst({ 
+    const user = await prisma.user.findFirst({
       where: {
         OR: [
           { email: identifier },
@@ -279,7 +289,7 @@ router.post('/login', async (req, res) => {
       },
       include: { role: true, tenant: true }
     });
-    
+
     if (!user || !user.password) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
@@ -304,6 +314,96 @@ router.post('/login', async (req, res) => {
   }
 });
 
+// POST /api/auth/forgot-password
+router.post('/forgot-password', async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: 'Email is required' });
+
+  try {
+    const user = await prisma.user.findUnique({ where: { email } });
+    
+    // For security, always return success even if user not found, 
+    // unless we're in dev mode where we want to see the link.
+    const devMode = process.env.NODE_ENV !== 'production';
+    
+    if (!user) {
+      if (devMode) return res.status(404).json({ error: 'User not found' });
+      return res.json({ message: 'If this email exists, a reset link has been sent.' });
+    }
+
+    // Generate a reset token (expires in 1 hour)
+    const resetToken = jwt.sign(
+      { id: user.id, purpose: 'password-reset' },
+      process.env.JWT_SECRET || 'change-me',
+      { expiresIn: '1h' }
+    );
+
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}`;
+
+    // Send email
+    const { sendEmail } = require('../lib/email');
+    await sendEmail({
+      to: email,
+      subject: 'Password Reset Request',
+      html: `
+        <div style="font-family: sans-serif; max-width: 500px;">
+          <h2>Reset Your Password</h2>
+          <p>Hi ${user.name},</p>
+          <p>You requested a password reset. Click the button below to set a new password:</p>
+          <a href="${resetUrl}" style="display:inline-block; background:#7c3aed; color:white; padding:12px 24px; border-radius:8px; text-decoration:none; font-weight:700; margin: 20px 0;">
+            Reset Password
+          </a>
+          <p>This link will expire in 1 hour.</p>
+          <p>If you didn't request this, you can safely ignore this email.</p>
+          <hr style="border:none; border-top:1px solid #eee; margin: 20px 0;" />
+          <p style="font-size: 12px; color: #666;">Nexus CRM - Secure Auth Service</p>
+        </div>
+      `,
+    });
+
+    // In dev mode, return the URL for easy testing
+    res.json({ 
+      message: 'Reset link sent!',
+      devResetUrl: devMode ? resetUrl : undefined 
+    });
+  } catch (error) {
+    console.error('[Auth] Forgot password error:', error);
+    res.status(500).json({ error: 'Failed to process request' });
+  }
+});
+
+// POST /api/auth/reset-password
+router.post('/reset-password', async (req, res) => {
+  const { token, newPassword } = req.body;
+  if (!token || !newPassword) return res.status(400).json({ error: 'Token and new password are required' });
+
+  try {
+    // Verify token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'change-me');
+    if (decoded.purpose !== 'password-reset') {
+      return res.status(400).json({ error: 'Invalid reset token purpose' });
+    }
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // Update user
+    await prisma.user.update({
+      where: { id: decoded.id },
+      data: { password: hashedPassword },
+    });
+
+    res.json({ message: 'Password updated successfully!' });
+  } catch (error) {
+    console.error('[Auth] Reset password error:', error);
+    if (error.name === 'TokenExpiredError') {
+      return res.status(400).json({ error: 'Reset link has expired' });
+    }
+    res.status(400).json({ error: 'Invalid or expired reset token' });
+  }
+});
+
 // DEV ONLY — auto-creates a test user and returns a token (remove in production)
 router.post('/dev-login', async (req, res) => {
   if (process.env.NODE_ENV === 'production') return res.status(404).json({ error: 'Not found' });
@@ -313,11 +413,11 @@ router.post('/dev-login', async (req, res) => {
 
   if (!user) {
     const tenant = await prisma.tenant.create({ data: { name: 'Dev Organization' } });
-    
-    const userRole = await prisma.role.create({ 
-      data: { tenantId: tenant.id, name: 'User', permissions: ['companies:read', 'companies:write', 'deals:read', 'deals:write'] } 
+
+    const userRole = await prisma.role.create({
+      data: { tenantId: tenant.id, name: 'User', permissions: ['companies:read', 'companies:write', 'deals:read', 'deals:write'] }
     });
-    
+
     await prisma.role.create({
       data: {
         tenantId: tenant.id,
@@ -332,7 +432,7 @@ router.post('/dev-login', async (req, res) => {
         ],
       },
     });
-    
+
     await prisma.role.create({
       data: {
         tenantId: tenant.id,
@@ -345,7 +445,7 @@ router.post('/dev-login', async (req, res) => {
         ],
       },
     });
-    
+
     user = await prisma.user.create({
       data: { tenantId: tenant.id, email, name: 'Dev Admin', roleId: userRole.id },  // User role, not Admin
     });

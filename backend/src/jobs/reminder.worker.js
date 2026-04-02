@@ -16,7 +16,7 @@ class SimpleReminderQueue {
   async add(name, data, options = {}) {
     const { delay = 0 } = options;
     const executeAt = Date.now() + delay;
-    
+
     const reminderData = {
       id: `${Date.now()}-${Math.random()}`,
       name,
@@ -24,10 +24,10 @@ class SimpleReminderQueue {
       executeAt,
       attempts: 0
     };
-    
+
     // Use simple list instead of sorted set for Upstash compatibility
     await redis.lpush('reminder-queue', JSON.stringify(reminderData));
-    
+
     console.log(`[Reminder] Scheduled reminder ${data.reminderId} for ${new Date(executeAt).toISOString()}`);
   }
 }
@@ -40,13 +40,13 @@ async function processReminders() {
     // Get all reminders from queue
     const queueLength = await redis.llen('reminder-queue');
     if (queueLength === 0) return;
-    
+
     const reminders = await redis.lrange('reminder-queue', 0, -1);
     console.log(`[Reminder] Processing ${reminders.length} reminders from queue`);
-    
+
     const now = Date.now();
     const toRetry = [];
-    
+
     for (const reminderJson of reminders) {
       // Validate and parse JSON safely
       let reminder;
@@ -56,7 +56,7 @@ async function processReminders() {
         console.error('[Reminder] Invalid JSON in queue, skipping:', reminderJson);
         continue; // Skip this corrupted item
       }
-      
+
       // Check if it's time to execute
       if (reminder.executeAt <= now) {
         try {
@@ -65,7 +65,7 @@ async function processReminders() {
           await processReminderJob(job);
         } catch (error) {
           console.error(`[Reminder] Failed to process reminder ${reminder.data?.reminderId}:`, error.message);
-          
+
           // Retry logic (max 3 attempts)
           if (reminder.attempts < 3) {
             reminder.attempts++;
@@ -81,14 +81,14 @@ async function processReminders() {
         toRetry.push(reminderJson);
       }
     }
-    
+
     // Clear queue and re-add pending/retry items
     await redis.del('reminder-queue');
     if (toRetry.length > 0) {
       await redis.lpush('reminder-queue', ...toRetry);
     }
-    
-let queueErrorLogged = false;
+
+    let queueErrorLogged = false;
   } catch (error) {
     if (!queueErrorLogged) {
       console.log('[Reminder] Redis queue offline — running without background jobs.');
@@ -113,12 +113,12 @@ async function processReminderJob(job) {
 
   // Check user's email preference
   const emailPreference = reminder.user.emailPreference || 'send';
-  
+
   switch (emailPreference) {
     case 'none':
       console.log(`[Reminder] User opted out of emails - skipping reminder ${reminderId}`);
       return; // Don't send email, but mark as processed
-      
+
     case 'forward':
       // Forward to verified address (for testing)
       var targetEmail = 'misheelmother@gmail.com';
@@ -131,12 +131,12 @@ async function processReminderJob(job) {
           </p>
         </div>`;
       break;
-      
+
     case 'send':
     default:
       // Send directly to user (if verified) or forward
-      var targetEmail = reminder.user.emailVerified ? 
-        reminder.user.email : 
+      var targetEmail = reminder.user.emailVerified ?
+        reminder.user.email :
         'misheelmother@gmail.com';
       var isActualEmail = targetEmail === reminder.user.email;
       var forwardingNotice = !isActualEmail ? `
@@ -150,7 +150,7 @@ async function processReminderJob(job) {
   }
 
   const isVerified = reminder.user.emailVerified;
-  
+
   // Send real email using Resend
   const { error } = await resend.emails.send({
     from: 'onboarding@resend.dev',

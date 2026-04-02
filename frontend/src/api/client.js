@@ -16,7 +16,7 @@ function getCookie(name) {
 }
 
 _axios.interceptors.request.use((config) => {
-  const token = localStorage.getItem("crm_token") || getCookie("auth_token");
+  const token = localStorage.getItem("crm_token") || sessionStorage.getItem("crm_token") || getCookie("auth_token");
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
@@ -42,10 +42,17 @@ export const api = MOCK_MODE
     }
   : _axios;
 
-export function setToken(token) {
-  localStorage.setItem("crm_token", token);
+export function setToken(token, remember = true) {
+  if (remember) {
+    localStorage.setItem("crm_token", token);
+    sessionStorage.removeItem("crm_token");
+  } else {
+    sessionStorage.setItem("crm_token", token);
+    localStorage.removeItem("crm_token");
+  }
 }
 
 export function clearToken() {
   localStorage.removeItem("crm_token");
+  sessionStorage.removeItem("crm_token");
 }

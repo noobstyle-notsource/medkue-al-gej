@@ -1,7 +1,6 @@
 import { GoogleOutlined, MailOutlined, UserOutlined } from "@ant-design/icons";
-import { Alert, Button, Form, Input } from "antd";
+import { Alert, Button, Form, Input, Checkbox } from "antd";
 import { useState } from "react";
-import { setToken } from "../api/client.js";
 import { api } from "../api/client.js";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../components/useAuth.js";
@@ -36,14 +35,15 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   function startGoogleLogin() {
-    window.location.href = "/api/auth/google";
+    window.location.href = "http://localhost:3000/api/auth/google";
   }
 
   async function onRegister(values) {
     setError(null); setLoading(true);
     try {
       const res = await api.post("/auth/register", values);
-      setToken(res.data.token); login(res.data.token); navigate("/");
+      login(res.data.token, true); // Keep persistent for new registers?
+      navigate("/");
     } catch (e) { setError(e?.response?.data?.message || e.message); }
     finally { setLoading(false); }
   }
@@ -52,7 +52,8 @@ export default function LoginPage() {
     setError(null); setLoading(true);
     try {
       const res = await api.post("/auth/login", values);
-      setToken(res.data.token); login(res.data.token); navigate("/");
+      login(res.data.token, !!values.remember);
+      navigate("/");
     } catch (e) { setError(e?.response?.data?.message || e.message); }
     finally { setLoading(false); }
   }
@@ -265,7 +266,7 @@ export default function LoginPage() {
                   </h2>
                   <p style={{ color: "#64748b", fontSize: 13, marginBottom: 24 }}>Set up your workspace in seconds.</p>
 
-                  <Form layout="vertical" onFinish={(v) => onRegister({ tenantName: v.tenantName, fullName: v.fullName, email: v.email, password: v.password })}>
+                  <Form layout="vertical" onFinish={(v) => onRegister({ organizationName: v.tenantName, name: v.fullName, email: v.email, password: v.password })}>
                     <Form.Item name="tenantName" label="Workspace" rules={[{ required: true }]}>
                       <Input placeholder="Acme Corp" suffix={<UserOutlined />} style={{ minHeight: 42 }} />
                     </Form.Item>
@@ -295,7 +296,11 @@ export default function LoginPage() {
                   </h2>
                   <p style={{ color: "#64748b", fontSize: 13, marginBottom: 24 }}>Welcome back — your pipeline awaits.</p>
 
-                  <Form layout="vertical" onFinish={(v) => onLogin({ email: v.email, password: v.password })}>
+                  <Form
+                    layout="vertical"
+                    initialValues={{ remember: true }}
+                    onFinish={(v) => onLogin({ identifier: v.email, password: v.password, remember: v.remember })}
+                  >
                     <Form.Item name="email" label="Email" rules={[{ required: true }]}>
                       <Input placeholder="you@company.com" suffix={<MailOutlined />} style={{ minHeight: 42 }} />
                     </Form.Item>
@@ -313,12 +318,18 @@ export default function LoginPage() {
                       <Input.Password placeholder="Your password" style={{ minHeight: 42 }} />
                     </Form.Item>
 
-                    <Form.Item style={{ marginTop: 18, marginBottom: 14 }}>
+                    <Form.Item name="remember" valuePropName="checked" style={{ marginTop: 12, marginBottom: 12 }}>
+                      <Checkbox style={{ color: "#cbd5e1", fontSize: 13 }}>
+                        Remember me for 30 days
+                      </Checkbox>
+                    </Form.Item>
+
+                    <Form.Item style={{ marginBottom: 14 }}>
                       <Button type="primary" htmlType="submit" loading={loading} className="lp-btn">Sign In</Button>
                     </Form.Item>
                   </Form>
 
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, color: "#334155", fontSize: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, color: "#334155", fontSize: 12 }}>
                     <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.07)" }} />
                     or
                     <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.07)" }} />

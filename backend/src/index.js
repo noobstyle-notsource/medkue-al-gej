@@ -1,5 +1,6 @@
 require('dotenv/config');
 const express = require('express');
+require('express-async-errors');
 const cors = require('cors');
 const passport = require('passport');
 
@@ -17,27 +18,29 @@ app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:5173', cred
 app.use(express.json());
 app.use(passport.initialize());
 
-app.use('/api/auth',     authRoutes);
+app.use('/api/auth', authRoutes);
 app.use('/api/companies', companyRoutes);
 app.use('/api/contacts', companyRoutes);
-app.use('/api/deals',    dealRoutes);
-app.use('/api/rbac',     rbacRoutes);
-app.use('/api',          miscRoutes);
-app.use('/api/csv',      csvRoutes);
+app.use('/api/deals', dealRoutes);
+app.use('/api/rbac', rbacRoutes);
+app.use('/api', miscRoutes);
+app.use('/api/csv', csvRoutes);
 app.use('/api/conversations', conversationsRoutes);
 
 app.get('/health', (_req, res) => res.json({ status: 'ok', ts: new Date() }));
 
 // Global error handler
+const fs = require('fs');
 app.use((err, _req, res, _next) => {
-  console.error('[Error]', err.message);
-  res.status(500).json({ error: err.message || 'Internal server error' });
+  console.error('[Error]', err.stack);
+  fs.appendFileSync('error.log', new Date().toISOString() + '\\n' + err.stack + '\\n\\n');
+  res.status(500).json({ error: err.message || 'Internal server error', stack: err.stack });
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🚀 CRM API → http://localhost:${PORT}`);
-  
+
   // Start the background job that routes reminders into user chats
   const { startCron } = require('./jobs/cron');
   startCron();

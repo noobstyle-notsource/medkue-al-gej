@@ -10,18 +10,28 @@ function isDealStage(value) {
 
 // GET /api/deals — returns all deals + kanban grouping
 const getDeals = async (req, res) => {
-  const deals = await prisma.deal.findMany({
-    where: { tenantId: req.user.tenantId, company: { deletedAt: null } },
-    include: { company: { select: { id: true, name: true, email: true, phone: true } } },
-    orderBy: { updatedAt: 'desc' },
-  });
+  try {
+    const { tenantId } = req.user;
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant ID missing from request' });
+    }
 
-  const kanban = DEAL_STAGES.reduce((acc, s) => {
-    acc[s] = deals.filter(d => d.stage === s);
-    return acc;
-  }, {});
+    const deals = await prisma.deal.findMany({
+      where: { tenantId, company: { deletedAt: null } },
+      include: { company: { select: { id: true, name: true, email: true, phone: true } } },
+      orderBy: { updatedAt: 'desc' },
+    });
 
-  res.json({ deals, kanban });
+    const kanban = DEAL_STAGES.reduce((acc, s) => {
+      acc[s] = deals.filter(d => d.stage === s);
+      return acc;
+    }, {});
+
+    res.json({ deals, kanban });
+  } catch (error) {
+    console.error('[Deals] Error fetching deals:', error);
+    res.status(500).json({ error: 'Failed to fetch deals', details: error.message });
+  }
 };
 
 const createDeal = async (req, res) => {

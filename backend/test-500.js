@@ -9,14 +9,14 @@ async function test() {
       process.env.JWT_SECRET || 'change-me',
       { expiresIn: '7d' }
     );
-    
+
     // 2. We don't have the user in DB, so let's hit auth directly with a real user
     const { PrismaClient } = require('@prisma/client');
     const prisma = new PrismaClient();
     const user = await prisma.user.findFirst({ where: { email: 'misheelmother@gmail.com' } });
     if (!user) {
-       console.log("No user found.");
-       return;
+      console.log("No user found.");
+      return;
     }
     const realToken = jwt.sign(
       { id: user.id, tenantId: user.tenantId, roleId: user.roleId },
@@ -30,7 +30,7 @@ async function test() {
     console.log("Deals OK:", req1.status);
     const text = await req1.text();
     console.log("Response Body:", text);
-    
+
   } catch (err) {
     console.log('Crash:', err);
   }

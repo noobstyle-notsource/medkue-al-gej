@@ -5,20 +5,20 @@ const bcrypt = require('bcrypt');
 
 async function seed() {
   const email = "misheelmother@gmail.com";
-  
+
   let user = await prisma.user.findUnique({ where: { email } });
   let tenantId;
-  
+
   if (!user) {
     console.log(`Creating user ${email}...`);
     const tenant = await prisma.tenant.create({ data: { name: "Mother's Org" } });
     tenantId = tenant.id;
-    
+
     // Create Role
     const role = await prisma.role.create({
       data: { tenantId, name: 'Admin', permissions: ['*'] }
     });
-    
+
     user = await prisma.user.create({
       data: {
         tenantId,
@@ -32,7 +32,7 @@ async function seed() {
     tenantId = user.tenantId;
     console.log(`User ${email} already exists.`);
   }
-  
+
   console.log("Seeding companies...");
   const company1 = await prisma.company.create({
     data: { tenantId, name: 'Google Cloud', phone: '+1 555-0101', email: 'cloud@google.com', status: 'Active' }
@@ -43,7 +43,7 @@ async function seed() {
   const company3 = await prisma.company.create({
     data: { tenantId, name: 'Vercel Inc.', phone: '+1 555-0303', email: 'hello@vercel.com', status: 'Lead' }
   });
-  
+
   console.log("Seeding deals (fake products)...");
   await prisma.deal.create({
     data: { tenantId, companyId: company1.id, title: 'Compute Engine Enterprise', value: 120000, stage: 'Won' }

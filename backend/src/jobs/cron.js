@@ -4,7 +4,7 @@ const { prisma } = require('../lib/prisma');
 async function processReminders() {
   try {
     const now = new Date();
-    
+
     // Find due reminders that haven't been picked up
     const reminders = await prisma.activity.findMany({
       where: {
@@ -70,7 +70,7 @@ async function processReminders() {
       // 5. Send the message!
       const title = r.notes.replace('[REMINDER] ', '').split(' —')[0];
       const detail = r.notes.split(' — ')[1] || '';
-      
+
       const parts = [
         `🔔 **REMINDER ALERT**`,
         `You have a scheduled reminder: "${title}"`

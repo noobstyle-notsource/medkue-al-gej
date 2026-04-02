@@ -48,46 +48,60 @@ async function invalidateDashboardCache(tenantId) {
 }
 
 const getDashboard = async (req, res) => {
-  const { tenantId } = req.user;
-  const cacheKey = dashboardCacheKey(tenantId);
+  try {
+    const { tenantId } = req.user;
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant ID missing from request' });
+    }
+    const cacheKey = dashboardCacheKey(tenantId);
 
-  const cached = await safeRedisOp(() => redis.get(cacheKey), null);
-  if (cached) return res.json({ fromCache: true, ...JSON.parse(cached) });
+    const cached = await safeRedisOp(() => redis.get(cacheKey), null);
+    if (cached) {
+      try {
+        return res.json({ fromCache: true, ...JSON.parse(cached) });
+      } catch (e) {
+        console.error('[Dashboard] Cache parse error:', e);
+      }
+    }
 
-  const [wonAgg, totalDeals, wonCount, upcomingDeals, pipelineBreakdown] = await Promise.all([
-    prisma.deal.aggregate({ where: { tenantId, stage: 'Won' }, _sum: { value: true } }),
-    prisma.deal.count({ where: { tenantId } }),
-    prisma.deal.count({ where: { tenantId, stage: 'Won' } }),
-    prisma.deal.findMany({
-      where: {
-        tenantId,
-        stage: { notIn: ['Won', 'Lost'] },
-        expectedCloseDate: { gte: new Date(), lte: new Date(Date.now() + 7 * 86400000) },
-      },
-      include: { company: { select: { name: true } } },
-      orderBy: { expectedCloseDate: 'asc' },
-      take: 5,
-    }),
-    prisma.deal.groupBy({
-      by: ['stage'],
-      where: { tenantId },
-      _count: { stage: true },
-      _sum: { value: true },
-    }),
-  ]);
+    const [wonAgg, totalDeals, wonCount, upcomingDeals, pipelineBreakdown] = await Promise.all([
+      prisma.deal.aggregate({ where: { tenantId, stage: 'Won' }, _sum: { value: true } }),
+      prisma.deal.count({ where: { tenantId } }),
+      prisma.deal.count({ where: { tenantId, stage: 'Won' } }),
+      prisma.deal.findMany({
+        where: {
+          tenantId,
+          stage: { notIn: ['Won', 'Lost'] },
+          expectedCloseDate: { gte: new Date(), lte: new Date(Date.now() + 7 * 86400000) },
+        },
+        include: { company: { select: { name: true } } },
+        orderBy: { expectedCloseDate: 'asc' },
+        take: 5,
+      }),
+      prisma.deal.groupBy({
+        by: ['stage'],
+        where: { tenantId },
+        _count: { stage: true },
+        _sum: { value: true },
+      }),
+    ]);
 
-  const data = {
-    wonAmount: wonAgg._sum.value ?? 0,
-    conversionRate: totalDeals > 0 ? +((wonCount / totalDeals) * 100).toFixed(1) : 0,
-    totalDeals,
-    wonCount,
-    upcomingDeals,
-    pipelineBreakdown,
-  };
+    const data = {
+      wonAmount: wonAgg?._sum?.value ?? 0,
+      conversionRate: totalDeals > 0 ? +((wonCount / totalDeals) * 100).toFixed(1) : 0,
+      totalDeals,
+      wonCount,
+      upcomingDeals,
+      pipelineBreakdown,
+    };
 
-  await safeRedisOp(() => redis.set(cacheKey, JSON.stringify(data), 'EX', CACHE_TTL), null);
+    await safeRedisOp(() => redis.set(cacheKey, JSON.stringify(data), 'EX', CACHE_TTL), null);
 
-  res.json({ fromCache: false, ...data });
+    res.json({ fromCache: false, ...data });
+  } catch (error) {
+    console.error('[Dashboard] Error fetching summary:', error);
+    res.status(500).json({ error: 'Failed to fetch dashboard summary', details: error.message });
+  }
 };
 
 // GET /api/activities/:companyId

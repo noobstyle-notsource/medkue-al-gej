@@ -4,7 +4,7 @@ const prisma = new PrismaClient();
 async function testNullCompany() {
   const user = await prisma.user.findFirst();
   if (!user) return;
-  
+
   // Creates a deal with NO company
   await prisma.deal.create({
     data: {

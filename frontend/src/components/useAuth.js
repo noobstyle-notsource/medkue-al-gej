@@ -21,8 +21,9 @@ function decodeJwt(token) {
 export function useAuth() {
   const [token, setTokenState] = useState(() => {
     const ls = localStorage.getItem("crm_token") || localStorage.getItem("token");
+    const ss = sessionStorage.getItem("crm_token");
     const cookie = getCookie("auth_token");
-    return ls || cookie;
+    return ls || ss || cookie;
   });
 
   // Decode JWT to get user info for display (name, email, id, tenantId)
@@ -35,22 +36,22 @@ export function useAuth() {
 
   useEffect(() => {
     const onStorage = () =>
-      setTokenState(localStorage.getItem("crm_token") || localStorage.getItem("token"));
+      setTokenState(localStorage.getItem("crm_token") || sessionStorage.getItem("crm_token") || localStorage.getItem("token"));
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
-  // Auto-login from cookie on first mount if no localStorage token
+  // Auto-login from cookie on first mount if no storage token
   useEffect(() => {
     const cookie = getCookie("auth_token");
-    if (cookie && !localStorage.getItem("crm_token") && !localStorage.getItem("token")) {
-      setToken(cookie);
+    if (cookie && !localStorage.getItem("crm_token") && !sessionStorage.getItem("crm_token") && !localStorage.getItem("token")) {
+      setToken(cookie, true); // Default to persistent if from cookie?
       setTokenState(cookie);
     }
   }, []);
 
-  const login = (newToken) => {
-    setToken(newToken);
+  const login = (newToken, remember = true) => {
+    setToken(newToken, remember);
     setTokenState(newToken);
   };
 
