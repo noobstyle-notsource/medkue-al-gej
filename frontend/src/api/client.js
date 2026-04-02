@@ -17,9 +17,37 @@ function getCookie(name) {
 
 _axios.interceptors.request.use((config) => {
   const token = localStorage.getItem("crm_token") || sessionStorage.getItem("crm_token") || getCookie("auth_token");
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+    console.log("[api request] Added Authorization header for:", config.url);
+  } else {
+    console.warn("[api request] No token found for:", config.url, {
+      ls: !!localStorage.getItem("crm_token"),
+      ss: !!sessionStorage.getItem("crm_token"),
+      cookie: !!getCookie("auth_token")
+    });
+  }
   return config;
 });
+
+_axios.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const status = error?.response?.status;
+    if (status === 401) {
+      const token = localStorage.getItem("crm_token") || sessionStorage.getItem("crm_token");
+      // Only redirect if we actually had a token stored (not first login attempt)
+      if (token) {
+        clearToken();
+        console.warn("[api] 401 received: cleared token and redirecting to /login");
+        window.location.href = "/login";
+      } else {
+        console.warn("[api] 401 received but no token stored - likely new session");
+      }
+    }
+    return Promise.reject(error);
+  }
+);
 
 // ── Mock layer: returns a real Promise with simulated latency ──
 function mockRequest(method, url, data) {
@@ -43,13 +71,20 @@ export const api = MOCK_MODE
   : _axios;
 
 export function setToken(token, remember = true) {
+  console.log("[api] setToken called:", { remember, tokenLen: token?.length });
   if (remember) {
     localStorage.setItem("crm_token", token);
     sessionStorage.removeItem("crm_token");
+    console.log("[api] Token stored in localStorage");
   } else {
     sessionStorage.setItem("crm_token", token);
     localStorage.removeItem("crm_token");
+    console.log("[api] Token stored in sessionStorage");
   }
+  console.log("[api] Token available for interceptor:", {
+    ls: !!localStorage.getItem("crm_token"),
+    ss: !!sessionStorage.getItem("crm_token")
+  });
 }
 
 export function clearToken() {

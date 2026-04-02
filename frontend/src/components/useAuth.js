@@ -46,18 +46,29 @@ export function useAuth() {
     }
 
     try {
+      console.log("[useAuth] Fetching profile with token:", token.substring(0, 20) + "...");
       const res = await api.get("/auth/me");
+      console.log("[useAuth] Profile loaded successfully:", res.data);
       setProfile(res.data);
     } catch (err) {
-      console.warn("[useAuth] refreshProfile failed", err.message);
-      clearToken();
-      setTokenState(null);
-      setProfile(null);
+      console.warn("[useAuth] refreshProfile failed:", {
+        message: err.message,
+        status: err?.response?.status,
+        token: token.substring(0, 20) + "..."
+      });
+      // Don't immediately clear token - the interceptor will handle 401
+      if (err?.response?.status === 401) {
+        // Token might be invalid, but don't clear it - let interceptor decide
+        console.warn("[useAuth] Got 401 but keeping token in storage for now");
+      } else {
+        setProfile(null); // Only clear profile on non-401 errors
+      }
     }
   };
 
   useEffect(() => {
     if (token) {
+      console.log("[useAuth] Token changed, fetching profile");
       refreshProfile();
     } else {
       setProfile(null);

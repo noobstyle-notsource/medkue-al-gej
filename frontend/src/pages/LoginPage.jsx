@@ -44,6 +44,8 @@ export default function LoginPage() {
     try {
       const res = await api.post("/auth/register", values);
       login(res.data.token, true); // Keep persistent for new registers?
+      // Wait a tick to ensure token is in storage before navigating
+      await new Promise(r => setTimeout(r, 50));
       navigate("/");
     } catch (e) { setError(e?.response?.data?.message || e.message); }
     finally { setLoading(false); }
@@ -54,6 +56,8 @@ export default function LoginPage() {
     try {
       const res = await api.post("/auth/login", values);
       login(res.data.token, !!values.remember);
+      // Wait a tick to ensure token is in storage before navigating
+      await new Promise(r => setTimeout(r, 50));
       navigate("/");
     } catch (e) { setError(e?.response?.data?.message || e.message); }
     finally { setLoading(false); }
