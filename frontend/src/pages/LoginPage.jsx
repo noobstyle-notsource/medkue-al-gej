@@ -33,7 +33,7 @@ export default function LoginPage() {
   const [error, setError] = useState(null);
   const [mode, setMode] = useState("login");
   const [loading, setLoading] = useState(false);
-  const [rememberMode, setRememberMode] = useState(true);
+  const [rememberMode, setRememberMode] = useState(false);
 
   function startGoogleLogin() {
     window.location.href = `http://localhost:3000/api/auth/google?remember=${rememberMode ? 'true' : 'false'}`;
@@ -299,7 +299,7 @@ export default function LoginPage() {
 
                   <Form
                     layout="vertical"
-                    initialValues={{ remember: true }}
+                    initialValues={{ remember: false }}
                     onFinish={(v) => onLogin({ identifier: v.email, password: v.password, remember: v.remember })}
                   >
                     <Form.Item name="email" label="Email" rules={[{ required: true }]}>

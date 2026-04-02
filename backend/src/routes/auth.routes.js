@@ -362,8 +362,12 @@ router.post('/login', async (req, res) => {
       include: { role: true, tenant: true }
     });
 
-    if (!user || !user.password) {
+    if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    if (!user.password) {
+      return res.status(403).json({ error: 'This account is connected through Google login. Use Google sign-in or set a password first.' });
     }
 
     // Check password
