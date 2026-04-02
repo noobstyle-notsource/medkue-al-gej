@@ -78,7 +78,11 @@ export default function LayoutShell() {
   }
 
   const handleEditProfile = () => {
-    form.setFieldsValue({ name: user?.name, email: user?.email });
+    form.setFieldsValue({
+      name: user?.name,
+      email: user?.email
+      // Password fields are optional, so don't set them
+    });
     setEditMode(true);
   };
 
@@ -89,22 +93,58 @@ export default function LayoutShell() {
 
   const handleSaveProfile = async (values) => {
     setSaving(true);
+    console.log("[Layout] Starting profile update with:", values);
     try {
-      console.log("[Layout] Updating profile:", values);
-      await fetch('/api/auth/me', {
+      // Handle profile update (name/email)
+      const profileData = { name: values.name, email: values.email };
+      console.log("[Layout] Calling PATCH /auth/me for profile");
+      const profileRes = await fetch('/api/auth/me', {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('crm_token') || sessionStorage.getItem('crm_token')}`
         },
-        body: JSON.stringify(values)
+        body: JSON.stringify(profileData)
       });
-      message.success("Profile updated successfully!");
+
+      if (!profileRes.ok) {
+        const errorData = await profileRes.json();
+        throw new Error(errorData.error || 'Failed to update profile');
+      }
+
+      // Handle password change if provided
+      if (values.oldPassword && values.newPassword) {
+        console.log("[Layout] Calling POST /auth/change-password");
+        const passwordRes = await fetch('/api/auth/change-password', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('crm_token') || sessionStorage.getItem('crm_token')}`
+          },
+          body: JSON.stringify({
+            oldPassword: values.oldPassword,
+            newPassword: values.newPassword
+          })
+        });
+
+        if (!passwordRes.ok) {
+          const errorData = await passwordRes.json();
+          throw new Error(errorData.error || 'Failed to change password');
+        }
+
+        message.success("Profile and password updated successfully!");
+      } else {
+        message.success("Profile updated successfully!");
+      }
+
       await refreshProfile();
       setEditMode(false);
     } catch (err) {
-      console.error("[Layout] Profile update failed:", err);
-      message.error(err?.response?.data?.error || "Failed to update profile");
+      console.error("[Layout] Profile update failed:", {
+        message: err.message,
+        stack: err.stack
+      });
+      message.error(err.message || "Failed to update profile");
     } finally {
       setSaving(false);
     }
@@ -316,6 +356,66 @@ export default function LayoutShell() {
               >
                 <Input placeholder="Email address" />
               </Form.Item>
+
+              {/* Password Change Section - Only show for email/password users */}
+              {user && !user.googleId && (
+                <>
+                  <div style={{
+                    margin: '20px 0 16px 0',
+                    padding: '12px 16px',
+                    background: 'var(--surface-2)',
+                    borderRadius: 6,
+                    border: '1px solid var(--border)'
+                  }}>
+                    <div style={{
+                      fontSize: 14,
+                      fontWeight: 600,
+                      color: 'var(--text)',
+                      marginBottom: 12
+                    }}>
+                      Change Password (Optional)
+                    </div>
+
+                    <Form.Item
+                      name="oldPassword"
+                      label={<span style={{ color: 'var(--text-3)', fontSize: 12 }}>Current Password</span>}
+                      rules={[{ required: false, message: "Please enter your current password" }]}
+                    >
+                      <Input.Password placeholder="Enter current password" />
+                    </Form.Item>
+
+                    <Form.Item
+                      name="newPassword"
+                      label={<span style={{ color: 'var(--text-3)', fontSize: 12 }}>New Password</span>}
+                      rules={[
+                        { required: false, message: "Please enter a new password" },
+                        { min: 4, message: "Password must be at least 4 characters" }
+                      ]}
+                    >
+                      <Input.Password placeholder="Enter new password" />
+                    </Form.Item>
+
+                    <Form.Item
+                      name="confirmPassword"
+                      label={<span style={{ color: 'var(--text-3)', fontSize: 12 }}>Confirm New Password</span>}
+                      dependencies={['newPassword']}
+                      rules={[
+                        { required: false, message: "Please confirm your new password" },
+                        ({ getFieldValue }) => ({
+                          validator(_, value) {
+                            if (!value || getFieldValue('newPassword') === value) {
+                              return Promise.resolve();
+                            }
+                            return Promise.reject(new Error('Passwords do not match'));
+                          },
+                        }),
+                      ]}
+                    >
+                      <Input.Password placeholder="Confirm new password" />
+                    </Form.Item>
+                  </div>
+                </>
+              )}
 
               <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", marginTop: 24 }}>
                 <Button onClick={handleCancelEdit}>Cancel</Button>

@@ -548,5 +548,65 @@ router.post('/dev-login', async (req, res) => {
   res.json({ token, user });
 });
 
+// POST /api/auth/change-password
+router.post('/change-password', authenticate, async (req, res) => {
+  try {
+    const { oldPassword, newPassword } = req.body;
+
+    if (!oldPassword || !newPassword) {
+      return res.status(400).json({ error: 'Old password and new password are required' });
+    }
+
+    if (newPassword.length < 4) {
+      return res.status(400).json({ error: 'New password must be at least 4 characters long' });
+    }
+
+    // Get current user with password
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      include: { role: true, tenant: true }
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (!user.password) {
+      return res.status(403).json({ error: 'This account uses Google login. Cannot change password.' });
+    }
+
+    // Verify old password
+    const isValidOldPassword = await bcrypt.compare(oldPassword, user.password);
+    if (!isValidOldPassword) {
+      return res.status(400).json({ error: 'Current password is incorrect' });
+    }
+
+    // Hash new password
+    const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+
+    // Update password
+    const updatedUser = await prisma.user.update({
+      where: { id: req.user.id },
+      data: { password: hashedNewPassword },
+    });
+
+    // Log audit trail
+    await audit({
+      tenantId: req.user.tenantId,
+      userId: req.user.id,
+      action: 'UPDATE',
+      resource: 'user',
+      resourceId: req.user.id,
+      before: { id: user.id, passwordChanged: false },
+      after: { id: updatedUser.id, passwordChanged: true },
+    });
+
+    res.json({ message: 'Password changed successfully!' });
+  } catch (error) {
+    console.error('[Auth] Change password error:', error);
+    res.status(500).json({ error: 'Failed to change password' });
+  }
+});
+
 module.exports = router;
 
