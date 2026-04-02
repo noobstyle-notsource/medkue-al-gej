@@ -433,9 +433,21 @@ router.post('/reset-password', async (req, res) => {
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
     // Update user
+    const foundUser = await prisma.user.findUnique({ where: { id: decoded.id } });
+
     await prisma.user.update({
       where: { id: decoded.id },
       data: { password: hashedPassword },
+    });
+
+    await audit({
+      tenantId: foundUser?.tenantId || decoded.tenantId || '',
+      userId: decoded.id,
+      action: 'UPDATE',
+      resource: 'user',
+      resourceId: decoded.id,
+      before: { id: decoded.id },
+      after: { id: decoded.id },
     });
 
     res.json({ message: 'Password updated successfully!' });

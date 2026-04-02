@@ -16,6 +16,15 @@ const ACTION_COLORS = {
   DELETE: { bg: "rgba(244,63,94,0.1)",   color: "#fda4af",  border: "rgba(244,63,94,0.25)" },
 };
 
+function maskEmail(email) {
+  if (!email || typeof email !== 'string') return '—';
+  const [local, domain] = email.split('@');
+  if (!domain) return '***';
+  if (local.length <= 1) return `*@${domain}`;
+  return `${local[0]}***@${domain}`;
+}
+
+
 export default function AuditLogPage() {
   const [loading, setLoading]       = useState(false);
   const [logs, setLogs]             = useState([]);
@@ -205,7 +214,7 @@ export default function AuditLogPage() {
                     {l.resourceId?.slice(0, 10)}…
                   </span>
                   <span style={{ color: "var(--text-2)" }}>
-                    {l.user?.name || l.user?.email || (l.userId ? l.userId.slice(0, 8) + "…" : "—")}
+                    {l.user?.name || (l.user?.email ? maskEmail(l.user.email) : (l.userId ? l.userId.slice(0, 8) + "…" : "—"))}
                   </span>
                   <span style={{ color: "var(--text-3)", fontSize: 11, textAlign: "right" }}>
                     {isToday
