@@ -26,6 +26,7 @@ const NAV_ITEMS = [
   { key: "/timeline",      label: "Timeline",      icon: <ClockCircleOutlined /> },
   { key: "/reminders",     label: "Reminders",     icon: <BellOutlined /> },
   { key: "/conversations", label: "Messages",      icon: <MessageOutlined /> },
+  { key: "/users",         label: "Users",         icon: <TeamOutlined /> },
   { key: "/csv",           label: "CSV",           icon: <FileExcelOutlined /> },
   { key: "/audit",         label: "Audit Log",     icon: <AuditOutlined /> },
 ];
@@ -37,6 +38,7 @@ const PAGE_TITLES = {
   "/contacts":      { title: "Contacts",        sub: "Manage people & companies" },
   "/reminders":     { title: "Reminders",       sub: "Upcoming tasks & alerts" },
   "/conversations": { title: "Messages",        sub: "Internal team messaging" },
+  "/users":         { title: "User Management", sub: "Manage team members" },
   "/csv":           { title: "CSV Import/Export", sub: "Bulk manage data" },
   "/audit":         { title: "Audit Log",       sub: "Track all changes" },
 };
@@ -44,7 +46,7 @@ const PAGE_TITLES = {
 // Nav group separators
 const NAV_GROUPS = [
   { label: "Main",     keys: ["/", "/deals", "/contacts", "/timeline"] },
-  { label: "Tools",    keys: ["/reminders", "/conversations", "/csv", "/audit"] },
+  { label: "Tools",    keys: ["/reminders", "/conversations", "/users", "/csv", "/audit"] },
 ];
 
 export default function LayoutShell() {
@@ -64,7 +66,8 @@ export default function LayoutShell() {
     localStorage.setItem("srm-theme", theme);
   }, [theme]);
 
-  const isAdmin = user?.email === 'misheelmother@gmail.com';
+  const isAdmin = user?.role?.name === 'Manager' || user?.role?.name === 'Admin';
+  const isBuyer = user?.role?.name === 'Buyer';
   const currentPath =
     location.pathname === "/"
       ? "/"
@@ -150,7 +153,7 @@ export default function LayoutShell() {
     }
   };
 
-  const roleLabel = isAdmin ? 'Admin' : 'Member';
+  const roleLabel = user?.role?.name || 'Member';
 
   // Derive initials and display name from JWT payload
   const displayName = user?.name || user?.email || "My Account";
@@ -197,7 +200,8 @@ export default function LayoutShell() {
               </div>
               <div style={{ padding: "0 8px", display: "flex", flexDirection: "column", gap: 2 }}>
                 {group.keys.map((key) => {
-                  if (key === '/audit' && !isAdmin) return null;
+                  if ((key === '/audit' || key === '/users' || key === '/csv') && !isAdmin) return null;
+                  if (isBuyer && (key === '/deals' || key === '/timeline')) return null;
                   const item = NAV_ITEMS.find((n) => n.key === key);
                   if (!item) return null;
                   const isActive = key === "/" ? currentPath === "/" : currentPath === key;

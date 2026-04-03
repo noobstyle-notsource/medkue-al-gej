@@ -1,5 +1,6 @@
 const { prisma } = require('../lib/prisma');
 const { audit } = require('../lib/audit');
+const bcrypt = require('bcrypt');
 
 const normalizePermissions = (permissions) => {
   if (!Array.isArray(permissions)) return null;
@@ -150,5 +151,62 @@ const assignUserRole = async (req, res) => {
   res.json(updatedUser);
 };
 
-module.exports = { getRoles, createRole, updateRole, getTenantUsers, assignUserRole };
+// POST /api/rbac/users
+const createTenantUser = async (req, res) => {
+  const { email, password, name, roleId } = req.body;
+
+  if (!email || !password || !name) {
+    return res.status(400).json({ error: 'Email, password, and name are required' });
+  }
+
+  // Check if user already exists
+  const existingUser = await prisma.user.findUnique({ where: { email } });
+  if (existingUser) {
+    return res.status(400).json({ error: 'A user with this email already exists' });
+  }
+
+  // Hash password
+  const hashedPassword = await bcrypt.hash(password, 10);
+
+  // Get the default role if not specified
+  let finalRoleId = roleId;
+  if (!finalRoleId) {
+    const defaultRole = await prisma.role.findFirst({
+      where: { tenantId: req.user.tenantId, name: 'Sales' },
+      select: { id: true },
+    });
+    finalRoleId = defaultRole?.id;
+  } else {
+    // Verify the role exists in this tenant
+    const role = await prisma.role.findFirst({
+      where: { id: finalRoleId, tenantId: req.user.tenantId },
+      select: { id: true },
+    });
+    if (!role) return res.status(404).json({ error: 'Role not found for tenant' });
+  }
+
+  const user = await prisma.user.create({
+    data: {
+      tenantId: req.user.tenantId,
+      email,
+      password: hashedPassword,
+      name,
+      roleId: finalRoleId,
+    },
+    include: { role: { select: { id: true, name: true, permissions: true } } },
+  });
+
+  await audit({
+    tenantId: req.user.tenantId,
+    userId: req.user.id,
+    action: 'CREATE',
+    resource: 'user',
+    resourceId: user.id,
+    after: user,
+  });
+
+  res.status(201).json(user);
+};
+
+module.exports = { getRoles, createRole, updateRole, getTenantUsers, assignUserRole, createTenantUser };
 

@@ -1,5 +1,6 @@
 require('dotenv/config');
 const express = require('express');
+const path = require('path');
 require('express-async-errors');
 const cors = require('cors');
 const passport = require('passport');
@@ -32,7 +33,17 @@ app.use('/api',               miscRoutes);
 app.use('/api/csv',           csvRoutes);
 app.use('/api/conversations',  conversationsRoutes);
 
+// ── Serve Frontend ────────────────────────────────────────────────────────
+const frontendPath = path.join(__dirname, '../../frontend/dist');
+app.use(express.static(frontendPath));
+
 app.get('/health', (_req, res) => res.json({ status: 'ok', ts: new Date() }));
+
+// Catch-all: Route all non-API requests to the React app
+app.get('*', (req, res) => {
+  if (req.path.startsWith('/api')) return res.status(404).json({ error: 'Not found' });
+  res.sendFile(path.join(frontendPath, 'index.html'));
+});
 
 // Global error handler
 app.use((err, _req, res, _next) => {

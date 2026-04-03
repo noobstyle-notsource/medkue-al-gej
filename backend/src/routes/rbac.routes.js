@@ -6,18 +6,20 @@ const {
   updateRole,
   getTenantUsers,
   assignUserRole,
+  createTenantUser,
 } = require('../controllers/rbac.controller');
 
 const router = Router();
 router.use(authenticate);
 
-// Admin-only management endpoints (requires wildcard permission)
-router.get('/roles', requirePermission('*'), getRoles);
-router.post('/roles', requirePermission('*'), createRole);
-router.put('/roles/:id', requirePermission('*'), updateRole);
+// Admin/Manager management endpoints
+router.get('/roles',    requirePermission('roles:read'),   getRoles);
+router.post('/roles',   requirePermission('roles:manage'), createRole);
+router.put('/roles/:id', requirePermission('roles:manage'), updateRole);
 
-router.get('/users', requirePermission('*'), getTenantUsers);
-router.patch('/users/:id/role', requirePermission('*'), assignUserRole);
+router.get('/users',    requirePermission('users:read'),   getTenantUsers);
+router.post('/users',   requirePermission('users:manage'), createTenantUser);
+router.patch('/users/:id/role', requirePermission('users:manage'), assignUserRole);
 
 module.exports = router;
 

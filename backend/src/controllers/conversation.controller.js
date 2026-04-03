@@ -10,7 +10,10 @@ async function assertParticipantOrThrow({ tenantId, userId, conversationId }) {
     where: {
       id: conversationId,
       tenantId,
-      OR: [{ userAId: userId }, { userBId: userId }],
+      OR: [
+        { userAId: userId },
+        { userBId: userId },
+      ],
     },
   });
   return convo;
@@ -22,33 +25,59 @@ const getConversations = async (req, res) => {
   const conversations = await prisma.conversation.findMany({
     where: { tenantId, OR: [{ userAId: userId }, { userBId: userId }] },
     orderBy: { updatedAt: 'desc' },
+    include: {
+      userB: { select: { id: true, name: true, email: true } },
+      company: { select: { id: true, name: true } },
+    },
   });
   res.json(conversations);
 };
 
-// POST /api/conversations { otherUserId }
+// POST /api/conversations { otherUserId or companyId }
 const createOrFindConversation = async (req, res) => {
   const { id: userId, tenantId } = req.user;
-  const { otherUserId } = req.body || {};
-  if (!otherUserId || typeof otherUserId !== 'string') {
-    return res.status(400).json({ error: 'otherUserId is required' });
+  const { otherUserId, companyId } = req.body || {};
+  
+  if ((!otherUserId && !companyId) || (otherUserId && companyId)) {
+    return res.status(400).json({ error: 'Provide either otherUserId or companyId, not both' });
   }
-  if (otherUserId === userId) {
-    return res.status(400).json({ error: 'Cannot create conversation with yourself' });
+  
+  if (otherUserId) {
+    if (typeof otherUserId !== 'string') {
+      return res.status(400).json({ error: 'otherUserId must be a string' });
+    }
+    if (otherUserId === userId) {
+      return res.status(400).json({ error: 'Cannot create conversation with yourself' });
+    }
+
+    const other = await prisma.user.findFirst({ where: { id: otherUserId, tenantId }, select: { id: true } });
+    if (!other) return res.status(404).json({ error: 'User not found in tenant' });
+
+    const [userAId, userBId] = canonicalPair(userId, otherUserId);
+
+    const convo = await prisma.conversation.upsert({
+      where: { tenantId_userAId_userBId: { tenantId, userAId, userBId } },
+      update: { updatedAt: new Date() },
+      create: { tenantId, userAId, userBId },
+    });
+
+    res.status(201).json(convo);
+  } else if (companyId) {
+    if (typeof companyId !== 'string') {
+      return res.status(400).json({ error: 'companyId must be a string' });
+    }
+
+    const company = await prisma.company.findFirst({ where: { id: companyId, tenantId }, select: { id: true } });
+    if (!company) return res.status(404).json({ error: 'Company not found in tenant' });
+
+    const convo = await prisma.conversation.upsert({
+      where: { tenantId_userAId_companyId: { tenantId, userAId: userId, companyId } },
+      update: { updatedAt: new Date() },
+      create: { tenantId, userAId: userId, companyId },
+    });
+
+    res.status(201).json(convo);
   }
-
-  const other = await prisma.user.findFirst({ where: { id: otherUserId, tenantId }, select: { id: true } });
-  if (!other) return res.status(404).json({ error: 'User not found in tenant' });
-
-  const [userAId, userBId] = canonicalPair(userId, otherUserId);
-
-  const convo = await prisma.conversation.upsert({
-    where: { tenantId_userAId_userBId: { tenantId, userAId, userBId } },
-    update: { updatedAt: new Date() },
-    create: { tenantId, userAId, userBId },
-  });
-
-  res.status(201).json(convo);
 };
 
 // GET /api/conversations/:id/messages?limit=50&offset=0

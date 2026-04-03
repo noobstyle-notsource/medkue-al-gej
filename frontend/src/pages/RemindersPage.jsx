@@ -58,12 +58,12 @@ export default function RemindersPage() {
     setLoading(true);
     setError(null);
     try {
-      const [aRes, cRes, uRes] = await Promise.all([
-        api.get("/activities"),
+      const [rRes, cRes, uRes] = await Promise.all([
+        api.get("/reminders"),
         api.get("/contacts?limit=500&page=1"),
         api.get("/auth/users"),
       ]);
-      setActivities(toList(aRes.data));
+      setActivities(toList(rRes.data));
       setContacts(toList(cRes.data));
       setUsers(toList(uRes.data));
     } catch (e) {
@@ -80,11 +80,10 @@ export default function RemindersPage() {
     try {
       const payload = {
         companyId: values.contactId,
-        type: "meeting",    // maps to meeting; shown as reminder in UI
-        notes: `[REMINDER] ${values.title}${values.notes ? ` — ${values.notes}` : ""}${values.assignTo ? ` (assigned to ${users.find((u) => u.id === values.assignTo)?.name || users.find((u) => u.id === values.assignTo)?.email})` : ""}`,
-        date: values.remindAt ? values.remindAt.toISOString() : new Date().toISOString(),
+        message: values.title + (values.notes ? `: ${values.notes}` : ""),
+        dueDate: values.remindAt ? values.remindAt.toISOString() : new Date().toISOString(),
       };
-      await api.post("/activities", payload);
+      await api.post("/reminders", payload);
       message.success("Reminder created!");
       form.resetFields();
       await load();
@@ -97,7 +96,7 @@ export default function RemindersPage() {
 
   async function deleteReminder(id) {
     try {
-      await api.delete(`/activities/${id}`);
+      await api.delete(`/reminders/${id}`);
       message.success("Reminder deleted");
       await load();
     } catch (e) {
@@ -111,22 +110,21 @@ export default function RemindersPage() {
     return m;
   }, [contacts]);
 
-  // Show activities that start with [REMINDER]
+  // Show reminders
   const reminders = useMemo(() => {
     const now = new Date();
     return activities
-      .filter((a) => a.notes?.startsWith("[REMINDER]"))
-      .filter((a) => {
-        const d = new Date(a.date);
+      .filter((r) => {
+        const d = new Date(r.dueDate);
         if (filter === "upcoming") return d >= now;
         if (filter === "past")     return d < now;
         return true;
       })
-      .sort((a, b) => new Date(a.date) - new Date(b.date));
+      .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
   }, [activities, filter]);
 
-  const upcoming = activities.filter((a) => a.notes?.startsWith("[REMINDER]") && new Date(a.date) >= new Date());
-  const overdue  = activities.filter((a) => a.notes?.startsWith("[REMINDER]") && new Date(a.date) < new Date());
+  const upcoming = activities.filter((r) => new Date(r.dueDate) >= new Date() && r.status !== 'cancelled');
+  const overdue  = activities.filter((r) => new Date(r.dueDate) < new Date() && r.status === 'pending');
 
   return (
     <div>
@@ -193,12 +191,11 @@ export default function RemindersPage() {
               </div>
             ) : (
               reminders.map((r, i) => {
-                const d = new Date(r.date);
-                const isOverdue = d < new Date();
-                const isSent = r.notes?.includes("[REMINDER:SENT]");
-                const rawTitle = r.notes?.replace("[REMINDER:SENT] ", "")?.replace("[REMINDER] ", "");
-                const title = rawTitle?.split(" — ")[0];
-                const note  = rawTitle?.split(" — ")[1] || "";
+                  const d = new Date(r.dueDate);
+                const isOverdue = d < new Date() && r.status === "pending";
+                const isSent = r.status === "sent";
+                const title = r.message.split(": ")[0];
+                const note = r.message.split(": ")[1] || "";
                 const pc = isOverdue ? PRIORITY_COLORS.high : PRIORITY_COLORS.low;
 
                 return (

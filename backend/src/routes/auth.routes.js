@@ -48,58 +48,53 @@ passport.use(new GoogleStrategy(
       let user = await prisma.user.findUnique({ where: { email } });
 
       if (!user) {
-        const tenant = await prisma.tenant.create({ data: { name: `${profile.displayName || email}'s Org` } });
-        const adminRole = await prisma.role.create({
-          data: { tenantId: tenant.id, name: 'Admin', permissions: ['*'] },
-        });
-        await prisma.role.create({
-          data: {
-            tenantId: tenant.id,
-            name: 'Manager',
-            permissions: [
-              'companies:read',
-              'companies:write',
-              'companies:delete',
-              'deals:read',
-              'deals:write',
-              'audit:read',
-            ],
-          },
-        });
-        await prisma.role.create({
-          data: {
-            tenantId: tenant.id,
-            name: 'Sales',
-            permissions: [
-              'companies:read',
-              'companies:write',
-              'deals:read',
-              'deals:write',
-            ],
-          },
+        // Find existing Main tenant (First one created)
+        let mainTenant = await prisma.tenant.findFirst({ orderBy: { createdAt: 'asc' } });
+        let isFirstUser = false;
+
+        if (!mainTenant) {
+          mainTenant = await prisma.tenant.create({ data: { name: `Main Workspace` } });
+          isFirstUser = true;
+
+          // Initialize Roles for the system (only needed once)
+          await prisma.role.create({ data: { tenantId: mainTenant.id, name: 'Admin', permissions: ['*'] } });
+          await prisma.role.create({
+            data: {
+              tenantId: mainTenant.id,
+              name: 'Manager',
+              permissions: ['*'], // First user gets full control
+            },
+          });
+          await prisma.role.create({
+            data: {
+              tenantId: mainTenant.id,
+              name: 'Sales',
+              permissions: ['companies:read', 'companies:write', 'deals:read', 'deals:write', 'reminders:read', 'reminders:write'],
+            },
+          });
+          await prisma.role.create({
+            data: {
+              tenantId: mainTenant.id,
+              name: 'Buyer',
+              permissions: ['companies:read', 'messages:read', 'messages:write', 'reminders:read'],
+            },
+          });
+        }
+
+        const roleName = isFirstUser ? 'Manager' : 'Buyer';
+        const role = await prisma.role.findFirst({
+          where: { tenantId: mainTenant.id, name: roleName },
         });
 
-        // Create regular User role with limited permissions
-        const userRole = await prisma.role.create({
-          data: {
-            tenantId: tenant.id,
-            name: 'User',
-            permissions: [
-              'companies:read',
-              'companies:write',
-              'deals:read',
-              'deals:write',
-            ],
-          },
-        });
-
+        // Create user with default verified status
         user = await prisma.user.create({
           data: {
-            tenantId: tenant.id,
+            tenantId: mainTenant.id,
             email,
             name: profile.displayName || email,
             googleId: profile.id,
-            roleId: userRole.id,  // User role, not Admin
+            roleId: role?.id,
+            emailVerified: true, // No verification needed
           },
         });
       }
@@ -268,61 +263,47 @@ router.post('/register', async (req, res) => {
     });
     console.log('[Auth] Tenant created:', tenant.id);
 
-    const adminRole = await prisma.role.create({
-      data: { tenantId: tenant.id, name: 'Admin', permissions: ['*'] },
-    });
-    console.log('[Auth] Admin role created:', adminRole.id);
+    // Find or create Main Tenant
+    let mainTenant = await prisma.tenant.findFirst({ orderBy: { createdAt: 'asc' } });
+    let isFirstUser = false;
 
-    await prisma.role.create({
-      data: {
-        tenantId: tenant.id,
-        name: 'Manager',
-        permissions: [
-          'companies:read',
-          'companies:write',
-          'companies:delete',
-          'deals:read',
-          'deals:write',
-          'audit:read',
-        ],
-      },
-    });
+    if (!mainTenant) {
+      mainTenant = await prisma.tenant.create({ data: { name: 'Main Workspace' } });
+      isFirstUser = true;
 
-    await prisma.role.create({
-      data: {
-        tenantId: tenant.id,
-        name: 'Sales',
-        permissions: [
-          'companies:read',
-          'companies:write',
-          'deals:read',
-          'deals:write',
-        ],
-      },
-    });
+      // Initialize Roles
+      await prisma.role.create({ data: { tenantId: mainTenant.id, name: 'Admin', permissions: ['*'] } });
+      await prisma.role.create({ data: { tenantId: mainTenant.id, name: 'Manager', permissions: ['*'] } });
+      await prisma.role.create({
+        data: {
+          tenantId: mainTenant.id,
+          name: 'Sales',
+          permissions: ['companies:read', 'companies:write', 'deals:read', 'deals:write', 'reminders:read', 'reminders:write'],
+        },
+      });
+      await prisma.role.create({
+        data: {
+          tenantId: mainTenant.id,
+          name: 'Buyer',
+          permissions: ['companies:read', 'messages:read', 'messages:write', 'reminders:read'],
+        },
+      });
+    }
 
-    // Create regular User role with limited permissions
-    const userRole = await prisma.role.create({
-      data: {
-        tenantId: tenant.id,
-        name: 'User',
-        permissions: [
-          'companies:read',
-          'companies:write',
-          'deals:read',
-          'deals:write',
-        ],
-      },
+    const roleName = isFirstUser ? 'Manager' : 'Buyer';
+    const role = await prisma.role.findFirst({
+      where: { tenantId: mainTenant.id, name: roleName },
     });
 
-    // Create user with regular User role (not Admin)
+    // Create user with Manager/Buyer role
     const user = await prisma.user.create({
       data: {
-        tenantId: tenant.id,
+        tenantId: mainTenant.id,
         email,
         name,
         password: hashedPassword,
-        roleId: userRole.id,
+        roleId: role?.id,
+        emailVerified: true,
       },
     });
 

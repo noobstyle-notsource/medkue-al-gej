@@ -7,23 +7,27 @@ const resend = new Resend(process.env.RESEND_API_KEY);
  * src/lib/email.js
  */
 async function sendEmail({ to, subject, html }) {
+  if (!process.env.RESEND_API_KEY || process.env.RESEND_API_KEY === 'change-me') {
+    console.log('[Email] Resend not configured. Skipping email to:', to);
+    return { skipped: true };
+  }
+  
   try {
     const { data, error } = await resend.emails.send({
-      from: 'onboarding@resend.dev', // Default Resend testing address
+      from: 'onboarding@resend.dev',
       to,
       subject,
       html,
     });
-
+    
     if (error) {
-      console.error('[Email] Resend error:', error);
-      throw new Error(error.message);
+      console.warn('[Email] Resend error (ignoring):', error);
+      return null;
     }
-
     return data;
   } catch (error) {
-    console.error('[Email] Failed to send email:', error);
-    throw error;
+    console.warn('[Email] Failed to send email (ignoring):', error.message);
+    return null;
   }
 }
 

@@ -1,7 +1,7 @@
 const { Worker } = require('bullmq');
 const { prisma } = require('../lib/prisma');
 const { sendEmail } = require('../lib/email');
-const { sendNotification, NOTIFICATION_TYPES } = require('../lib/notifications');
+const { broadcastNotification, NOTIFICATION_TYPES } = require('../lib/notifications');
 const fs = require('fs');
 const { parse } = require('csv-parse');
 
@@ -61,18 +61,17 @@ async function handleReminderEmail(data) {
     },
   });
 
-  if (!reminder || reminder.status === 'sent') return;
-
   const companyName = reminder.company?.name || 'your contact';
+  const reminderTitle = companyName;
+  const reminderMsg = reminder.message;
 
-  // Send in-app notification (primary)
-  await sendNotification(
-    reminder.user.id,
+  // Broadcast to EVERYONE in the tenant (as requested)
+  await broadcastNotification(
     reminder.tenantId,
     'REMINDER_DUE',
     {
-      title: companyName,
-      message: companyName,
+      title: reminderTitle,
+      message: reminderMsg,
     },
     {
       relatedEntity: 'reminder',

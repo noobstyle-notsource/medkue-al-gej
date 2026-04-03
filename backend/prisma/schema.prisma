@@ -86,6 +86,7 @@ model Company {
   deals      Deal[]
   activities Activity[]
   Reminder   Reminder[]
+  conversations Conversation[]
 
   @@index([tenantId, deletedAt])
   @@index([tenantId, status])
@@ -149,16 +150,19 @@ model Conversation {
   id        String   @id @default(cuid())
   tenantId  String
   userAId   String
-  userBId   String
+  userBId   String?
+  companyId String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   userA    User      @relation("ConversationUserA", fields: [userAId], references: [id], onDelete: Cascade)
-  userB    User      @relation("ConversationUserB", fields: [userBId], references: [id], onDelete: Cascade)
+  userB    User?     @relation("ConversationUserB", fields: [userBId], references: [id], onDelete: Cascade)
+  company  Company?  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   messages Message[]
 
   @@unique([tenantId, userAId, userBId])
+  @@unique([tenantId, userAId, companyId])
   @@index([tenantId])
 }
 

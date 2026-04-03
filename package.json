@@ -4,15 +4,13 @@
   "description": "Full-stack application with separated frontend and backend",
   "scripts": {
     "dev": "npx concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
-    "dev:full": "npm run dev",
     "dev:frontend": "npm --prefix frontend run dev",
-    "dev:backend": "npm --prefix backend run db:push -- --skip-generate && npm --prefix backend run dev",
-    "install:all": "npm run install:frontend && npm run install:backend",
-    "install:frontend": "npm --prefix frontend install",
-    "install:backend": "npm --prefix backend install",
+    "dev:backend": "npm --prefix backend run dev",
+    "build": "npm run install:all && npm run build:frontend && npm run generate:prisma",
     "build:frontend": "npm --prefix frontend run build",
-    "build:backend": "npm --prefix backend run build",
-    "start": "npm run dev"
+    "generate:prisma": "npm --prefix backend run db:generate",
+    "install:all": "npm install && npm --prefix frontend install && npm --prefix backend install",
+    "start": "node backend/src/index.js"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

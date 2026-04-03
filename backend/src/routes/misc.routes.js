@@ -18,12 +18,7 @@ router.get('/dashboard/summary',     requirePermission('deals:read'),     getDas
 router.get('/activities',            requirePermission('companies:read'),  getActivities);
 router.get('/activities/:companyId', requirePermission('companies:read'),  getActivities);
 router.post('/activities',           requirePermission('companies:write'), createActivity);
-router.get('/audit-logs',            authenticate, (req, res, next) => {
-  if (req.user.email !== 'misheelmother@gmail.com') {
-    return res.status(403).json({ error: 'Access denied' });
-  }
-  next();
-}, getAuditLogs);
+router.get('/audit-logs',            requirePermission('audit:read'),     getAuditLogs);
 
 // Reminders
 router.get('/reminders',             authenticate, getReminders);

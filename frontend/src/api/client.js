@@ -6,7 +6,7 @@ const MOCK_MODE = false;
 
 // ── Real axios instance (used when MOCK_MODE = false) ──
 const _axios = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://localhost:3000/api",
+  baseURL: import.meta.env.VITE_API_URL || "/api",
   timeout: 30000,
 });
 

@@ -8,6 +8,7 @@ export default function ConversationsPage() {
   const { user: me } = useAuth(); // decoded JWT {id, ...}
 
   const [users, setUsers]                               = useState([]);
+  const [companies, setCompanies]                       = useState([]);
   const [conversations, setConversations]               = useState([]);
   const [messages, setMessages]                         = useState([]);
   const [selectedConvId, setSelectedConvId]             = useState(null);
@@ -23,12 +24,18 @@ export default function ConversationsPage() {
   // Build a "name" map from userId → name
   const nameMap = {};
   users.forEach((u) => (nameMap[u.id] = u.name || u.email || u.id.slice(0, 8)));
+  companies.forEach((c) => (nameMap[c.id] = c.name || c.id.slice(0, 8)));
 
-  // The "other" user in a conversation (not me)
-  function otherUser(conv) {
+  // The "other" participant in a conversation (user or company)
+  function otherParticipant(conv) {
     if (!conv) return null;
-    const otherId = conv.userAId === me?.id ? conv.userBId : conv.userAId;
-    return users.find((u) => u.id === otherId) || { id: otherId, name: otherId.slice(0, 8) + "…" };
+    if (conv.userBId) {
+      const otherId = conv.userAId === me?.id ? conv.userBId : conv.userAId;
+      return users.find((u) => u.id === otherId) || { id: otherId, name: otherId.slice(0, 8) + "…", type: 'user' };
+    } else if (conv.companyId) {
+      return companies.find((c) => c.id === conv.companyId) || { id: conv.companyId, name: conv.companyId.slice(0, 8) + "…", type: 'company' };
+    }
+    return null;
   }
 
   // Load all tenant users
@@ -36,6 +43,14 @@ export default function ConversationsPage() {
     try {
       const res = await api.get("/auth/users");
       setUsers(res.data || []);
+    } catch { /* silent */ }
+  }
+
+  // Load all tenant companies
+  async function loadCompanies() {
+    try {
+      const res = await api.get("/companies?limit=1000");
+      setCompanies(res.data.companies || []);
     } catch { /* silent */ }
   }
 
@@ -70,6 +85,7 @@ export default function ConversationsPage() {
   // Initial load
   useEffect(() => {
     loadUsers();
+    loadCompanies();
     loadConversations();
   }, []);
 
@@ -82,10 +98,11 @@ export default function ConversationsPage() {
     return () => clearInterval(pollRef.current);
   }, [selectedConvId]);
 
-  // Start or find a conversation with a user
-  async function startConversation(userId) {
+  // Start or find a conversation with a user or company
+  async function startConversation(participantId, type) {
     try {
-      const res = await api.post("/conversations", { otherUserId: userId });
+      const payload = type === 'company' ? { companyId: participantId } : { otherUserId: participantId };
+      const res = await api.post("/conversations", payload);
       await loadConversations();
       setSelectedConvId(res.data?.id);
     } catch (e) {
@@ -121,8 +138,14 @@ export default function ConversationsPage() {
     return !q || u.name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q);
   });
 
+  // Filter companies for search
+  const filteredCompanies = companies.filter((c) => {
+    const q = userSearch.toLowerCase();
+    return !q || c.name?.toLowerCase().includes(q);
+  });
+
   const selectedConv = conversations.find((c) => c.id === selectedConvId);
-  const selectedOther = otherUser(selectedConv);
+  const selectedOther = otherParticipant(selectedConv);
 
   return (
     <div>
@@ -156,56 +179,121 @@ export default function ConversationsPage() {
           <div style={{ flex: 1, overflowY: "auto" }}>
             {loading && users.length === 0 ? (
               <div style={{ display: "flex", justifyContent: "center", padding: 30 }}><Spin /></div>
-            ) : filteredUsers.length === 0 ? (
-              <div className="srm-empty" style={{ padding: "20px" }}>
-                <span style={{ fontSize: 20, opacity: 0.3 }}>👥</span>
-                <span style={{ fontSize: 12 }}>No teammates found</span>
-              </div>
             ) : (
-              filteredUsers.map((u) => {
-                // Find existing convo with this user
-                const existingConv = conversations.find(
-                  (c) => (c.userAId === u.id || c.userBId === u.id)
-                );
-                const isSelected = existingConv?.id === selectedConvId;
+              <>
+                {/* Users */}
+                {filteredUsers.length > 0 && (
+                  <div>
+                    <div style={{ padding: "8px 14px", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-3)" }}>
+                      Team Members
+                    </div>
+                    {filteredUsers.map((u) => {
+                      // Find existing convo with this user
+                      const existingConv = conversations.find(
+                        (c) => (c.userAId === u.id || c.userBId === u.id)
+                      );
+                      const isSelected = existingConv?.id === selectedConvId;
 
-                return (
-                  <div
-                    key={u.id}
-                    className={`srm-convo-item ${isSelected ? "active" : ""}`}
-                    onClick={() => {
-                      if (existingConv) {
-                        setSelectedConvId(existingConv.id);
-                      } else {
-                        startConversation(u.id);
-                      }
-                    }}
-                  >
-                    <div style={{
-                      width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
-                      background: `linear-gradient(135deg, hsl(${(u.name?.charCodeAt(0) || 99) * 3 % 360}, 65%, 55%), hsl(${(u.name?.charCodeAt(1) || 66) * 5 % 360}, 65%, 45%))`,
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: 13, color: "#fff", fontWeight: 700,
-                    }}>
-                      {(u.name?.[0] || u.email?.[0] || "?").toUpperCase()}
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {u.name || "Unknown"}
-                      </div>
-                      <div style={{ fontSize: 11, color: "var(--text-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {u.email}
-                      </div>
-                    </div>
-                    {!existingConv && (
-                      <span style={{
-                        fontSize: 10, padding: "2px 6px", borderRadius: 999,
-                        background: "rgba(99,102,241,0.15)", color: "var(--primary)", fontWeight: 700
-                      }}>NEW</span>
-                    )}
+                      return (
+                        <div
+                          key={u.id}
+                          className={`srm-convo-item ${isSelected ? "active" : ""}`}
+                          onClick={() => {
+                            if (existingConv) {
+                              setSelectedConvId(existingConv.id);
+                            } else {
+                              startConversation(u.id, 'user');
+                            }
+                          }}
+                        >
+                          <div style={{
+                            width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
+                            background: `linear-gradient(135deg, hsl(${(u.name?.charCodeAt(0) || 99) * 3 % 360}, 65%, 55%), hsl(${(u.name?.charCodeAt(1) || 66) * 5 % 360}, 65%, 45%))`,
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            fontSize: 13, color: "#fff", fontWeight: 700,
+                          }}>
+                            {(u.name?.[0] || u.email?.[0] || "?").toUpperCase()}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {u.name || "Unknown"}
+                            </div>
+                            <div style={{ fontSize: 11, color: "var(--text-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {u.email}
+                            </div>
+                          </div>
+                          {!existingConv && (
+                            <span style={{
+                              fontSize: 10, padding: "2px 6px", borderRadius: 999,
+                              background: "rgba(99,102,241,0.15)", color: "var(--primary)", fontWeight: 700
+                            }}>NEW</span>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
-                );
-              })
+                )}
+
+                {/* Companies */}
+                {filteredCompanies.length > 0 && (
+                  <div>
+                    <div style={{ padding: "8px 14px", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-3)" }}>
+                      Contacts
+                    </div>
+                    {filteredCompanies.map((c) => {
+                      // Find existing convo with this company
+                      const existingConv = conversations.find(
+                        (conv) => conv.companyId === c.id
+                      );
+                      const isSelected = existingConv?.id === selectedConvId;
+
+                      return (
+                        <div
+                          key={c.id}
+                          className={`srm-convo-item ${isSelected ? "active" : ""}`}
+                          onClick={() => {
+                            if (existingConv) {
+                              setSelectedConvId(existingConv.id);
+                            } else {
+                              startConversation(c.id, 'company');
+                            }
+                          }}
+                        >
+                          <div style={{
+                            width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
+                            background: `linear-gradient(135deg, hsl(${(c.name?.charCodeAt(0) || 99) * 3 % 360}, 65%, 55%), hsl(${(c.name?.charCodeAt(1) || 66) * 5 % 360}, 65%, 45%))`,
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            fontSize: 13, color: "#fff", fontWeight: 700,
+                          }}>
+                            {(c.name?.[0] || "?").toUpperCase()}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {c.name || "Unknown"}
+                            </div>
+                            <div style={{ fontSize: 11, color: "var(--text-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              Contact
+                            </div>
+                          </div>
+                          {!existingConv && (
+                            <span style={{
+                              fontSize: 10, padding: "2px 6px", borderRadius: 999,
+                              background: "rgba(99,102,241,0.15)", color: "var(--primary)", fontWeight: 700
+                            }}>NEW</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {filteredUsers.length === 0 && filteredCompanies.length === 0 && (
+                  <div className="srm-empty" style={{ padding: "20px" }}>
+                    <span style={{ fontSize: 20, opacity: 0.3 }}>👥</span>
+                    <span style={{ fontSize: 12 }}>No contacts found</span>
+                  </div>
+                )}
+              </>
             )}
           </div>
 
@@ -217,7 +305,7 @@ export default function ConversationsPage() {
               </div>
               <div style={{ overflowY: "auto", maxHeight: 200 }}>
                 {conversations.map((c) => {
-                  const other = otherUser(c);
+                  const other = otherParticipant(c);
                   return (
                     <div
                       key={c.id}
@@ -234,10 +322,10 @@ export default function ConversationsPage() {
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {other?.name || other?.email || "Unknown"}
+                          {other?.name || "Unknown"}
                         </div>
                         <div style={{ fontSize: 10, color: "var(--text-3)" }}>
-                          {new Date(c.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                          {other?.type === 'company' ? 'Contact' : new Date(c.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                         </div>
                       </div>
                     </div>
@@ -264,14 +352,16 @@ export default function ConversationsPage() {
                 </div>
                 <div>
                   <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>
-                    {selectedOther.name || selectedOther.email}
+                    {selectedOther.name || "Unknown"}
                   </div>
-                  <div style={{ fontSize: 11, color: "var(--text-3)" }}>Online</div>
+                  <div style={{ fontSize: 11, color: "var(--text-3)" }}>
+                    {selectedOther.type === 'company' ? 'Contact' : 'Online'}
+                  </div>
                 </div>
               </div>
             ) : (
               <span style={{ color: "var(--text-3)", fontSize: 13 }}>
-                👈 Select a teammate to start chatting
+                👈 Select a teammate or contact to start chatting
               </span>
             )}
           </div>
